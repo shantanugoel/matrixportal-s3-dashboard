@@ -452,3 +452,27 @@ class NetworkManager:
             return True
         
         return False
+    
+    async def fetch_json(self, url, timeout=30):
+        """Fetch JSON data from a URL"""
+        if not self.is_connected() or not self.socket_pool:
+            return None
+            
+        try:
+            import adafruit_requests
+            
+            requests = adafruit_requests.Session(self.socket_pool, self.ssl_context)
+            response = requests.get(url, timeout=timeout)
+            
+            if response.status_code == 200:
+                data = response.json()
+                response.close()
+                return data
+            else:
+                print(f"HTTP error {response.status_code} for {url}")
+                response.close()
+                return None
+                
+        except Exception as e:
+            print(f"Error fetching {url}: {e}")
+            return None

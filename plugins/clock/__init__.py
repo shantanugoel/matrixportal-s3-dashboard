@@ -305,20 +305,27 @@ class Plugin(PluginInterface):
     def render(self, display_buffer, width, height):
         """Render time digits to LED matrix"""
         try:
-            # Clear the display
-            for y in range(height):
-                for x in range(width):
+            # Get screen configuration for positioning
+            screen_config = getattr(self, 'screen_config', {})
+            region_x = screen_config.get('x', 0)
+            region_y = screen_config.get('y', 16) 
+            region_width = screen_config.get('width', width)
+            region_height = screen_config.get('height', 32)
+            
+            # Clear only the clock region
+            for y in range(region_y, min(region_y + region_height, height)):
+                for x in range(region_x, min(region_x + region_width, width)):
                     display_buffer[x, y] = 0
             
             # Get time string
             time_str = self.data.get('time', '--:--')
             
-            # Calculate starting position to center the time
+            # Calculate starting position to center the time within the region
             char_width = 5
             char_spacing = 1
             total_width = len(time_str) * (char_width + char_spacing) - char_spacing
-            start_x = (width - total_width) // 2
-            start_y = (height - 7) // 2  # 7 is digit height
+            start_x = region_x + (region_width - total_width) // 2
+            start_y = region_y + (region_height - 7) // 2  # 7 is digit height
             
             # Draw each character
             x_pos = start_x

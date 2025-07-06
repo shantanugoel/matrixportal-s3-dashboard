@@ -7,7 +7,8 @@ import time
 import gc
 import sys
 from .display import DisplayEngine
-from .scheduler import DisplayScheduler
+from .screen_scheduler import ScreenScheduler
+from .screen_manager import ScreenManager
 from .plugin_interface import PluginManager
 from .config import ConfigManager
 from .simple_webserver import WebServer
@@ -23,6 +24,7 @@ class Dashboard:
         self.config_manager = None
         self.network_manager = None
         self.plugin_manager = None
+        self.screen_manager = None
         self.display_engine = None
         self.scheduler = None
         self.web_server = None
@@ -61,8 +63,13 @@ class Dashboard:
                 bit_depth=display_config.get('bit_depth', 6)
             )
             
+            # Screen manager 
+            system_config = self.config.get('system', {})
+            self.screen_manager = ScreenManager(
+                self.config, self.plugin_manager, self.network_manager)
+            
             # Scheduler
-            self.scheduler = DisplayScheduler(self.display_engine, self.plugin_manager)
+            self.scheduler = ScreenScheduler(self.display_engine, self.screen_manager)
             
             # Web server
             web_config = self.config.get('web', {})
@@ -143,30 +150,20 @@ class Dashboard:
             print(f"Network initialization error: {e}")
     
     async def _init_plugins(self):
-        """Initialize and configure plugins"""
+        """Initialize and configure screens with plugins"""
         print("Initializing plugins...")
         
-        plugin_configs = self.config.get('plugins', {})
+        # Load screens from configuration
+        self.screen_manager.load_screens()
         
-        for plugin_name, plugin_config in plugin_configs.items():
-            try:
-                if plugin_config.get('enabled', False):
-                    # Create plugin instance
-                    plugin = self.plugin_manager.create_plugin_instance(plugin_name, plugin_config)
-                    
-                    if plugin:
-                        # Initialize plugin
-                        await plugin.init()
-                        
-                        # Add to scheduler
-                        self.scheduler.add_plugin(plugin)
-                        
-                        print(f"Initialized plugin: {plugin_name}")
-                    else:
-                        print(f"Failed to create plugin: {plugin_name}")
-                        
-            except Exception as e:
-                print(f"Plugin initialization error ({plugin_name}): {e}")
+        # Initialize all plugins in all screens
+        for screen in self.screen_manager.screens:
+            for plugin in screen.get_plugins():
+                try:
+                    await plugin.init()
+                    print(f"Initialized plugin: {plugin.metadata.name}")
+                except Exception as e:
+                    print(f"Plugin initialization error ({plugin.metadata.name}): {e}")
     
     async def _start_services(self):
         """Start core services"""

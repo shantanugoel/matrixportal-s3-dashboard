@@ -25,6 +25,7 @@ class PluginInterface:
         self.last_update = 0
         self.data = {}
         self.error_count = 0
+        self.network = None
         
     @property
     def metadata(self):
@@ -41,6 +42,10 @@ class PluginInterface:
     async def cleanup(self):
         """Clean up plugin resources (optional)"""
         pass
+    
+    def set_network(self, network_manager):
+        """Set the network manager for plugins that need network access"""
+        self.network = network_manager
     
     async def pull(self):
         """
