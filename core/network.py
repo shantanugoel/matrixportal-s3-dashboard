@@ -7,6 +7,12 @@ import socketpool
 import ssl
 import time
 import asyncio
+try:
+    import watchdog
+    WATCHDOG_AVAILABLE = True
+except ImportError:
+    WATCHDOG_AVAILABLE = False
+    print("Watchdog not available on this platform")
 
 class NetworkManager:
     """Manages Wi-Fi connectivity and network operations"""
@@ -24,10 +30,35 @@ class NetworkManager:
         self.ip_address = None
         self.last_connection_attempt = 0
         self.connection_failures = 0
+        self.last_watchdog_feed = time.monotonic()
+        self.consecutive_failures = 0
+        self.backoff_delay = self.retry_delay  # Start with base delay
         
         # Socket pool for reuse
         self.socket_pool = None
         self.ssl_context = None
+        
+        # Watchdog configuration
+        self.watchdog_enabled = config.get('watchdog_enabled', True)
+        self.watchdog_timeout = config.get('watchdog_timeout', 120)  # 2 minutes
+        self.watchdog_feed_interval = config.get('watchdog_feed_interval', 30)  # 30 seconds
+        
+        # Captive portal configuration
+        self.captive_portal_enabled = config.get('captive_portal_enabled', True)
+        self.captive_portal_ssid = config.get('captive_portal_ssid', 'MatrixPortal-Setup')
+        self.captive_portal_password = config.get('captive_portal_password', '')  # Open AP
+        self.captive_portal_active = False
+        self.captive_portal_timeout = config.get('captive_portal_timeout', 300)  # 5 minutes
+        
+        # Initialize watchdog if available
+        self.watchdog = None
+        if WATCHDOG_AVAILABLE and self.watchdog_enabled:
+            try:
+                self.watchdog = watchdog.WatchDogTimer(timeout=self.watchdog_timeout)
+                print(f"Watchdog initialized with {self.watchdog_timeout}s timeout")
+            except Exception as e:
+                print(f"Failed to initialize watchdog: {e}")
+                self.watchdog = None
         
     async def connect(self):
         """Connect to Wi-Fi network"""
@@ -94,13 +125,32 @@ class NetworkManager:
             print(f"Error disconnecting: {e}")
     
     async def reconnect(self):
-        """Attempt to reconnect to Wi-Fi"""
+        """Attempt to reconnect to Wi-Fi with exponential backoff"""
+        current_time = time.monotonic()
+        
+        # Calculate backoff delay based on consecutive failures
+        required_delay = min(self.backoff_delay, 300)  # Max 5 minutes
+        
         # Don't attempt reconnection too frequently
-        if time.monotonic() - self.last_connection_attempt < 30:
+        if current_time - self.last_connection_attempt < required_delay:
             return False
         
-        print("Attempting Wi-Fi reconnection...")
-        return await self.connect()
+        print(f"Attempting Wi-Fi reconnection... (attempt {self.consecutive_failures + 1}, delay: {required_delay}s)")
+        
+        success = await self.connect()
+        
+        if success:
+            # Reset backoff on successful connection
+            self.consecutive_failures = 0
+            self.backoff_delay = self.retry_delay
+            print("Reconnection successful, backoff reset")
+        else:
+            # Increase backoff delay exponentially
+            self.consecutive_failures += 1
+            self.backoff_delay = min(self.backoff_delay * 2, 300)  # Max 5 minutes
+            print(f"Reconnection failed, backoff increased to {self.backoff_delay}s")
+        
+        return success
     
     def is_connected(self):
         """Check if connected to Wi-Fi"""
@@ -190,9 +240,19 @@ class NetworkManager:
             'connected': self.is_connected(),
             'ip_address': self.ip_address,
             'signal_strength': self.get_signal_strength(),
+            'connection_quality': self.get_connection_quality(),
             'connection_failures': self.connection_failures,
+            'consecutive_failures': self.consecutive_failures,
+            'backoff_delay': self.backoff_delay,
             'ssid': self.ssid,
-            'mac_address': self.get_mac_address()
+            'mac_address': self.get_mac_address(),
+            'watchdog': self.get_watchdog_status(),
+            'captive_portal': {
+                'enabled': self.captive_portal_enabled,
+                'active': self.captive_portal_active,
+                'ssid': self.captive_portal_ssid,
+                'ip_address': self.get_captive_portal_ip()
+            }
         }
     
     async def test_connectivity(self, host="8.8.8.8", port=53):
@@ -233,3 +293,162 @@ class NetworkManager:
             return "Poor"
         else:
             return "Very Poor"
+    
+    def feed_watchdog(self):
+        """Feed the watchdog to prevent system reset"""
+        if self.watchdog:
+            try:
+                self.watchdog.feed()
+                self.last_watchdog_feed = time.monotonic()
+                print("Watchdog fed")
+            except Exception as e:
+                print(f"Error feeding watchdog: {e}")
+    
+    def check_watchdog_feed_needed(self):
+        """Check if watchdog needs to be fed"""
+        if not self.watchdog:
+            return False
+        
+        time_since_last_feed = time.monotonic() - self.last_watchdog_feed
+        return time_since_last_feed >= self.watchdog_feed_interval
+    
+    async def maintain_system_health(self):
+        """Maintain system health - feed watchdog and check connectivity"""
+        # Feed watchdog if needed
+        if self.check_watchdog_feed_needed():
+            self.feed_watchdog()
+        
+        # If captive portal is active, don't try to reconnect to WiFi
+        if self.captive_portal_active:
+            return
+        
+        # Check connectivity and reconnect if needed
+        if not self.is_connected():
+            print("Lost connectivity, attempting reconnection...")
+            success = await self.reconnect()
+            
+            # If reconnection fails, check if we should start captive portal
+            if not success:
+                await self.check_captive_portal_fallback()
+        
+        # Test internet connectivity periodically
+        if self.is_connected():
+            connectivity_ok = await self.test_connectivity()
+            if not connectivity_ok:
+                print("Internet connectivity lost, attempting reconnection...")
+                success = await self.reconnect()
+                
+                # If reconnection fails, check if we should start captive portal
+                if not success:
+                    await self.check_captive_portal_fallback()
+    
+    def enable_watchdog(self):
+        """Enable watchdog monitoring"""
+        if WATCHDOG_AVAILABLE and not self.watchdog:
+            try:
+                self.watchdog = watchdog.WatchDogTimer(timeout=self.watchdog_timeout)
+                self.watchdog_enabled = True
+                print("Watchdog enabled")
+            except Exception as e:
+                print(f"Failed to enable watchdog: {e}")
+    
+    def disable_watchdog(self):
+        """Disable watchdog monitoring"""
+        if self.watchdog:
+            try:
+                self.watchdog.deinit()
+                self.watchdog = None
+                self.watchdog_enabled = False
+                print("Watchdog disabled")
+            except Exception as e:
+                print(f"Error disabling watchdog: {e}")
+    
+    def get_watchdog_status(self):
+        """Get watchdog status information"""
+        return {
+            'watchdog_available': WATCHDOG_AVAILABLE,
+            'watchdog_enabled': self.watchdog_enabled,
+            'watchdog_active': self.watchdog is not None,
+            'watchdog_timeout': self.watchdog_timeout,
+            'last_feed': self.last_watchdog_feed,
+            'time_since_feed': time.monotonic() - self.last_watchdog_feed,
+            'feed_interval': self.watchdog_feed_interval
+        }
+    
+    async def start_captive_portal(self):
+        """Start captive portal access point for configuration"""
+        if not self.captive_portal_enabled:
+            print("Captive portal disabled in configuration")
+            return False
+        
+        try:
+            # Stop existing connections first
+            if wifi.radio.connected:
+                wifi.radio.stop_station()
+            
+            # Start access point
+            print(f"Starting captive portal: {self.captive_portal_ssid}")
+            
+            if self.captive_portal_password:
+                wifi.radio.start_ap(
+                    ssid=self.captive_portal_ssid,
+                    password=self.captive_portal_password
+                )
+            else:
+                wifi.radio.start_ap(ssid=self.captive_portal_ssid)
+            
+            self.captive_portal_active = True
+            self.connected = False  # Not connected to external network
+            
+            # Create socket pool for AP mode
+            self.socket_pool = socketpool.SocketPool(wifi.radio)
+            
+            print(f"Captive portal active on {wifi.radio.ipv4_address_ap}")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to start captive portal: {e}")
+            self.captive_portal_active = False
+            return False
+    
+    async def stop_captive_portal(self):
+        """Stop captive portal and return to station mode"""
+        try:
+            if self.captive_portal_active:
+                wifi.radio.stop_ap()
+                self.captive_portal_active = False
+                print("Captive portal stopped")
+            
+            # Reset socket pool
+            self.socket_pool = None
+            return True
+            
+        except Exception as e:
+            print(f"Error stopping captive portal: {e}")
+            return False
+    
+    def is_captive_portal_active(self):
+        """Check if captive portal is currently active"""
+        return self.captive_portal_active
+    
+    def get_captive_portal_ip(self):
+        """Get captive portal IP address"""
+        try:
+            if self.captive_portal_active:
+                return str(wifi.radio.ipv4_address_ap)
+            return None
+        except:
+            return None
+    
+    async def check_captive_portal_fallback(self):
+        """Check if captive portal fallback should be activated"""
+        # Only activate if we have too many consecutive failures
+        if (self.consecutive_failures >= 3 and 
+            not self.captive_portal_active and 
+            self.captive_portal_enabled):
+            
+            print("Multiple connection failures, starting captive portal...")
+            await self.start_captive_portal()
+            return True
+        
+        return False
