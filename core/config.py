@@ -47,7 +47,12 @@ class ConfigManager:
                 "clock": {
                     "enabled": True,
                     "display_seconds": True,
-                    "format_24h": True
+                    "format_24h": True,
+                    "utc_offset_hours": 5.5,
+                    "timezone_name": "IST",
+                    "ntp_enabled": True,
+                    "ntp_server": "pool.ntp.org",
+                    "ntp_sync_interval": 3600
                 }
             }
         }

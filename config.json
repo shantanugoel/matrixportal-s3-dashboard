@@ -4,7 +4,7 @@
     "wifi_password": "${WIFI_PASSWORD}",
     "display_brightness": 50,
     "rotation_interval": 5,
-    "timezone": "UTC"
+    "timezone": "Asia/Kolkata"
   },
   "display": {
     "width": 64,
@@ -31,7 +31,11 @@
       "enabled": true,
       "display_seconds": true,
       "format_24h": true,
-      "display_date": false
+      "utc_offset_hours": 5.5,
+      "timezone_name": "IST",
+      "ntp_enabled": true,
+      "ntp_server": "pool.ntp.org",
+      "ntp_sync_interval": 3600
     }
   }
 }

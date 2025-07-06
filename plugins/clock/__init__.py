@@ -3,15 +3,38 @@ Digital clock plugin for MatrixPortal S3 Dashboard
 Displays current time with readable digits on 64x64 LED matrix
 """
 import time
+try:
+    import adafruit_ntp
+    NTP_AVAILABLE = True
+except ImportError:
+    NTP_AVAILABLE = False
+    print("adafruit_ntp not available - clock will use system time")
+
 from core.plugin_interface import PluginInterface, PluginMetadata
 
 class Plugin(PluginInterface):
     def __init__(self, config):
         super().__init__(config)
         
+        # NTP configuration
+        self.ntp_client = None
+        self.ntp_server = config.get('ntp_server', 'pool.ntp.org')
+        self.last_ntp_sync = 0
+        self.ntp_sync_interval = config.get('ntp_sync_interval', 3600)  # Sync every hour
+        self.ntp_enabled = config.get('ntp_enabled', True) and NTP_AVAILABLE
+        
         # Configuration
         self.format_24h = config.get('format_24h') if 'format_24h' in config else True
         self.display_seconds = config.get('display_seconds') if 'display_seconds' in config else False
+        
+        # UTC offset configuration (in hours, can be fractional like 5.5 for IST)
+        self.utc_offset_hours = config.get('utc_offset_hours', 5.5)  # Default to IST +5:30
+        self.utc_offset = self.utc_offset_hours * 3600  # Convert to seconds
+        self.timezone_name = config.get('timezone_name', 'IST')  # Just for display
+        
+        # Initialize NTP client
+        if self.ntp_enabled:
+            self._init_ntp()
         
         # Digit patterns for 5x7 font (simplified for LED matrix)
         self.digit_patterns = {
@@ -127,13 +150,123 @@ class Plugin(PluginInterface):
             {
                 "enabled": True,
                 "format_24h": True,
-                "display_seconds": False
+                "display_seconds": False,
+                "utc_offset_hours": 5.5,
+                "timezone_name": "IST",
+                "ntp_enabled": True,
+                "ntp_server": "pool.ntp.org",
+                "ntp_sync_interval": 3600
             }
         )
     
+    def _init_ntp(self):
+        """Initialize NTP client for time synchronization"""
+        try:
+            if NTP_AVAILABLE:
+                # NTP client will be initialized when we need it (lazy loading)
+                # because it requires an active network connection
+                print(f"NTP client configured for server: {self.ntp_server}")
+            else:
+                print("NTP not available - using system time")
+        except Exception as e:
+            print(f"NTP initialization error: {e}")
+    
+    async def _sync_ntp_time(self):
+        """Synchronize time with NTP server"""
+        if not self.ntp_enabled or not NTP_AVAILABLE:
+            return False
+            
+        try:
+            # Check if we need to sync (don't sync too frequently)
+            current_time = time.monotonic()
+            if self.last_ntp_sync and current_time - self.last_ntp_sync < self.ntp_sync_interval:
+                return True  # Recently synced
+            
+            # Create NTP client if not exists (requires network)
+            if self.ntp_client is None:
+                # Import socket pool from network manager if available
+                import wifi
+                import socketpool
+                
+                if not wifi.radio.connected:
+                    print("No network connection for NTP sync")
+                    return False
+                
+                pool = socketpool.SocketPool(wifi.radio)
+                self.ntp_client = adafruit_ntp.NTP(pool, server=self.ntp_server)
+            
+            # Sync time
+            print(f"Syncing time with NTP server: {self.ntp_server}")
+            utc_time = self.ntp_client.datetime
+            
+            # Convert to timestamp and set system time
+            # Note: CircuitPython might not allow setting system time
+            self.last_ntp_sync = current_time
+            print(f"NTP sync successful: {utc_time}")
+            return True
+            
+        except Exception as e:
+            print(f"NTP sync failed: {e}")
+            return False
+    
     async def pull(self):
         """Get current time data"""
-        current_time = time.localtime()
+        # Try to sync with NTP if enabled and needed
+        ntp_synced = await self._sync_ntp_time()
+        
+        # Get current time and apply timezone offset
+        if ntp_synced and self.ntp_client:
+            try:
+                # Get UTC time from NTP (returns struct_time)
+                utc_time_struct = self.ntp_client.datetime
+                
+                # Calculate timezone offset in hours and minutes
+                offset_hours = int(self.utc_offset // 3600)
+                offset_minutes = int((self.utc_offset % 3600) // 60)
+                
+                # Apply offset manually to the time components
+                hour = utc_time_struct.tm_hour + offset_hours
+                minute = utc_time_struct.tm_min + offset_minutes
+                day = utc_time_struct.tm_mday
+                
+                # Handle minute overflow
+                if minute >= 60:
+                    minute -= 60
+                    hour += 1
+                elif minute < 0:
+                    minute += 60
+                    hour -= 1
+                
+                # Handle hour overflow
+                if hour >= 24:
+                    hour -= 24
+                    day += 1
+                elif hour < 0:
+                    hour += 24
+                    day -= 1
+                
+                # Create time struct manually
+                current_time = time.struct_time((
+                    utc_time_struct.tm_year,
+                    utc_time_struct.tm_mon,
+                    day,
+                    hour,
+                    minute,
+                    utc_time_struct.tm_sec,
+                    0, 0, 0  # weekday, yearday, dst (not used)
+                ))
+                
+            except Exception as e:
+                print(f"Error using NTP time: {e}")
+                # Fallback to system time with timezone offset
+                current_timestamp = time.time()
+                local_timestamp = current_timestamp + self.utc_offset
+                current_time = time.localtime(local_timestamp)
+        else:
+            # Use system time with timezone offset
+            current_timestamp = time.time()
+            local_timestamp = current_timestamp + self.utc_offset
+            current_time = time.localtime(local_timestamp)
         
         # Format time string
         if self.format_24h:
@@ -161,7 +294,12 @@ class Plugin(PluginInterface):
             'time': time_str,
             'hour': current_time.tm_hour,
             'minute': current_time.tm_min,
-            'second': current_time.tm_sec
+            'second': current_time.tm_sec,
+            'timezone_name': self.timezone_name,
+            'utc_offset_hours': self.utc_offset_hours,
+            'ntp_enabled': self.ntp_enabled,
+            'ntp_synced': ntp_synced,
+            'last_ntp_sync': self.last_ntp_sync
         }
     
     def render(self, display_buffer, width, height):
