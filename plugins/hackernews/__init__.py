@@ -2,6 +2,7 @@ import json
 import gc
 import time
 from core.plugin_interface import PluginInterface, PluginMetadata
+from core.fonts import draw_text, draw_char, get_text_width, truncate_text
 
 class Plugin(PluginInterface):
     def __init__(self, config):
@@ -138,24 +139,24 @@ class Plugin(PluginInterface):
             
             # Prepare title text
             title = self.current_story["title"]
-            if len(title) > max_title_length:
-                title = title[:max_title_length - 3] + "..."
             
-            # Simple scrolling effect for long titles
-            scroll_offset = self._calculate_scroll_offset(title, region_width)
+            # Calculate available space for title (after "HN: " prefix)
+            title_x = region_x + 18  # After "HN: "
+            available_width = region_width - 18 - 2  # Minus prefix and margin
+            
+            # Truncate title to fit
+            title = truncate_text(title, available_width)
             
             # Render "HN:" prefix
-            self._draw_text(display_buffer, "HN:", region_x + 2, region_y + 2, orange, width)
+            draw_text(display_buffer, "HN:", region_x + 2, region_y + 2, orange)
             
             # Render title
-            title_x = region_x + 18  # After "HN: "
-            visible_title = self._get_visible_text(title, title_x, region_width, scroll_offset)
-            self._draw_text(display_buffer, visible_title, title_x, region_y + 2, white, width)
+            draw_text(display_buffer, title, title_x, region_y + 2, white, available_width)
             
             # Render score on second line if space
             if region_height >= 12:
                 score_text = f"{self.current_story['score']} pts"
-                self._draw_text(display_buffer, score_text, region_x + 2, region_y + 10, gray, width)
+                draw_text(display_buffer, score_text, region_x + 2, region_y + 10, gray)
             
             return True
             
@@ -163,86 +164,4 @@ class Plugin(PluginInterface):
             print(f"HackerNews render error: {e}")
             return False
     
-    def _calculate_scroll_offset(self, text, available_width):
-        """Calculate scroll offset for long text"""
-        if len(text) * 6 <= available_width - 20:  # 6 pixels per char, 20 pixel margin
-            return 0
-            
-        # Simple time-based scrolling
-        scroll_speed = 10  # seconds per full scroll
-        current_time = time.monotonic()
-        scroll_position = (current_time % scroll_speed) / scroll_speed
-        max_offset = max(0, len(text) * 6 - available_width + 20)
-        
-        return int(scroll_position * max_offset)
-    
-    def _get_visible_text(self, text, start_x, width, scroll_offset):
-        """Get the visible portion of text considering scroll offset"""
-        available_width = width - start_x - 4  # 4 pixel margin
-        chars_per_width = available_width // 6  # 6 pixels per character
-        
-        if scroll_offset == 0:
-            return text[:chars_per_width]
-            
-        char_offset = scroll_offset // 6
-        return text[char_offset:char_offset + chars_per_width]
-    
-    def _draw_text(self, buffer, text, x, y, color, width):
-        """Simple pixel-based text rendering"""
-        for i, char in enumerate(text):
-            char_x = x + (i * 6)
-            if char_x + 4 >= width:
-                break
-                
-            # Simple 4x6 character representation
-            self._draw_char(buffer, char, char_x, y, color)
-    
-    def _draw_char(self, buffer, char, x, y, color):
-        """Draw a single character using a simple pixel pattern"""
-        # Very basic character patterns (placeholder)
-        if char.isalpha():
-            # Letter pattern
-            pattern = [
-                [1,1,1,1],
-                [1,0,0,1],
-                [1,1,1,1],
-                [1,0,0,1],
-                [1,0,0,1],
-                [0,0,0,0]
-            ]
-        elif char.isdigit():
-            # Number pattern
-            pattern = [
-                [0,1,1,0],
-                [1,0,0,1],
-                [1,0,0,1],
-                [1,0,0,1],
-                [0,1,1,0],
-                [0,0,0,0]
-            ]
-        elif char == ':':
-            # Colon pattern
-            pattern = [
-                [0,0,0,0],
-                [0,1,0,0],
-                [0,0,0,0],
-                [0,1,0,0],
-                [0,0,0,0],
-                [0,0,0,0]
-            ]
-        else:
-            # Default pattern for other characters
-            pattern = [
-                [1,0,1,0],
-                [0,1,0,1],
-                [1,0,1,0],
-                [0,1,0,1],
-                [1,0,1,0],
-                [0,0,0,0]
-            ]
-        
-        # Draw the pattern
-        for py, row in enumerate(pattern):
-            for px, pixel in enumerate(row):
-                if pixel and y + py < 64 and x + px < 64:
-                    buffer[x + px, y + py] = color
+

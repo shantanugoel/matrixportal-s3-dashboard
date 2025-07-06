@@ -1,6 +1,7 @@
 import json
 import gc
 from core.plugin_interface import PluginInterface, PluginMetadata
+from core.fonts import draw_text, draw_char
 
 class Plugin(PluginInterface):
     def __init__(self, config):
@@ -84,13 +85,13 @@ class Plugin(PluginInterface):
             condition_text = self.weather_data['condition'][:12]  # Truncate
             
             # Render temperature in region
-            self._draw_text(display_buffer, temp_text, region_x + 2, region_y + 2, yellow, width)
+            draw_text(display_buffer, temp_text, region_x + 2, region_y + 2, yellow, region_width - 16)
             
-            # Render condition below temperature
-            self._draw_text(display_buffer, condition_text, region_x + 2, region_y + 10, white, width)
+            # Render condition below temperature  
+            draw_text(display_buffer, condition_text, region_x + 2, region_y + 10, white, region_width - 4)
             
             # Simple weather icon placeholder (a few pixels representing weather)
-            icon_x = region_x + region_width - 12
+            icon_x = region_x + region_width - 10
             self._draw_weather_icon(display_buffer, icon_x, region_y + 2, self.weather_data['condition'], blue)
             
             return True
@@ -99,18 +100,7 @@ class Plugin(PluginInterface):
             print(f"Weather render error: {e}")
             return False
     
-    def _draw_text(self, buffer, text, x, y, color, width):
-        """Simple pixel-based text rendering (very basic)"""
-        # This is a placeholder - real implementation would use proper fonts
-        # For now, just draw some pixels to represent text
-        for i, char in enumerate(text[:8]):  # Max 8 characters
-            char_x = x + (i * 6)
-            if char_x + 4 < width:
-                # Simple 4x6 character representation
-                for py in range(6):
-                    for px in range(4):
-                        if (px + py) % 2 == 0:  # Simple pattern
-                            buffer[char_x + px, y + py] = color
+
     
     def _draw_weather_icon(self, buffer, x, y, condition, color):
         """Draw a simple weather icon"""
