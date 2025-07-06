@@ -224,3 +224,13 @@ class PluginManager:
         if plugin_name in self.plugins:
             return self.plugins[plugin_name]['instance']
         return None
+    
+    def reload_plugins(self):
+        """Reload all plugins (for configuration changes)"""
+        print("Reloading plugins after configuration change")
+        # For now, just log the reload - full reload would require scheduler coordination
+        # In a full implementation, this would:
+        # 1. Stop all plugin tasks
+        # 2. Recreate instances with new config
+        # 3. Restart tasks
+        return True

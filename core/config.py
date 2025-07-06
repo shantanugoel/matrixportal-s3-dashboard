@@ -96,23 +96,46 @@ class ConfigManager:
     def save_config(self, config):
         """Save configuration to file with atomic write"""
         try:
+            print("Starting config save process")
             # Create backup if original exists
             try:
+                print("Attempting to create backup")
                 os.rename(self.config_file, self.config_backup)
-            except OSError:
+                print("Backup created successfully")
+            except OSError as backup_err:
+                print(f"Backup failed (normal if file doesn't exist): {backup_err}")
                 # Original file doesn't exist, no need to backup
                 pass
             
             # Write to temporary file first
             temp_file = f"{self.config_file}.tmp"
+            print(f"Attempting to write to temp file: {temp_file}")
             with open(temp_file, 'w') as f:
                 json.dump(config, f, indent=2)
+            print("Temp file written successfully")
             
             # Atomic rename
+            print(f"Attempting to rename {temp_file} to {self.config_file}")
             os.rename(temp_file, self.config_file)
+            print("Rename successful")
             
             print(f"Configuration saved to {self.config_file}")
             return True
+            
+        except OSError as e:
+            print(f"Error saving config: {e}")
+            print(f"About to re-raise OSError: {e}")
+            
+            # Restore backup if it exists
+            try:
+                os.rename(self.config_backup, self.config_file)
+            except OSError:
+                # Backup file doesn't exist
+                pass
+            
+            # Re-raise OSError so web server can handle it properly
+            print("Re-raising OSError now")
+            raise
             
         except Exception as e:
             print(f"Error saving config: {e}")

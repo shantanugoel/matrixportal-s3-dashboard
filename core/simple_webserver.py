@@ -75,9 +75,36 @@ class SimpleWebServer:
         """Poll for incoming requests - call this regularly"""
         if self.server and self.running:
             try:
-                self.server.poll()
+                # adafruit_httpserver poll() method processes incoming requests
+                # Some versions might return different types, so handle gracefully
+                result = self.server.poll()
+                # Poll might return a result we don't need to process
+                if result is not None:
+                    # Some implementations might return status info
+                    pass
+            except TypeError as e:
+                # Handle specific type errors that might occur with polling
+                print(f"Server poll type error (possibly harmless): {e}")
             except Exception as e:
+                # More detailed error logging for other exceptions
                 print(f"Server poll error: {e}")
+                print(f"Error type: {type(e)}")
+                # Don't print full traceback in production to avoid spam
+                # import traceback
+                # traceback.print_exception(type(e), e, e.__traceback__)
+    
+    def _create_json_response(self, request, data, status_code=200):
+        """Create a JSON response with proper status code"""
+        response = httpserver.JSONResponse(request, data)
+        if status_code != 200:
+            if status_code == 400:
+                response.status = "400 Bad Request"
+            elif status_code == 500:
+                response.status = "500 Internal Server Error"
+            else:
+                response.status = f"{status_code} Error"
+        print(f"_create_json_response: status={response.status}, data={data}")
+        return response
     
     def _register_routes(self):
         """Register HTTP routes"""
@@ -92,10 +119,15 @@ class SimpleWebServer:
             """Serve JSON status information"""
             return self._create_status_response(request)
         
-        @self.server.route("/api/config")
+        @self.server.route("/api/config", methods=["GET"])
         def handle_config_get(request):
             """Get current configuration"""
             return self._get_config_response(request)
+        
+        @self.server.route("/api/config", methods=["POST"])
+        def handle_config_post(request):
+            """Update configuration"""
+            return self._update_config_response(request)
     
     def _create_html_response(self, request):
         """Create the main HTML dashboard page"""
@@ -227,6 +259,69 @@ class SimpleWebServer:
             white-space: pre-wrap;
             display: none;
         }
+        .config-form {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        .config-form h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007cba;
+            padding-bottom: 10px;
+        }
+        .form-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+        }
+        .form-section h3 {
+            margin: 0 0 15px 0;
+            color: #495057;
+            font-size: 1.1em;
+        }
+        .form-group {
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .form-group label {
+            font-weight: 500;
+            color: #495057;
+            flex: 1;
+        }
+        .form-group input {
+            flex: 1;
+            max-width: 200px;
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group input[type="checkbox"] {
+            max-width: 20px;
+            margin-left: 10px;
+        }
+        .form-group input[type="range"] {
+            max-width: 150px;
+        }
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+        }
+        .form-actions button {
+            min-width: 150px;
+        }
     </style>
 </head>
 <body>
@@ -271,19 +366,74 @@ class SimpleWebServer:
             <button onclick="window.location.reload()">🔄 Refresh</button>
             <button onclick="getStatus()">📊 Get Status</button>
             <button onclick="toggleJsonViewer()">🔍 View JSON</button>
+            <button onclick="toggleConfigForm()">⚙️ Configure</button>
         </div>
         
         <div id="jsonViewer" class="json-viewer"></div>
         
+        <div id="configForm" class="config-form">
+            <h2>⚙️ Configuration</h2>
+            <form id="configFormData">
+                <div class="form-section">
+                    <h3>System Settings</h3>
+                    <div class="form-group">
+                        <label for="rotation_interval">Plugin Rotation Interval (seconds):</label>
+                        <input type="number" id="rotation_interval" min="1" max="300" value="5">
+                    </div>
+                    <div class="form-group">
+                        <label for="timezone">Timezone:</label>
+                        <input type="text" id="timezone" value="UTC" placeholder="UTC">
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>Display Settings</h3>
+                    <div class="form-group">
+                        <label for="display_brightness">Brightness:</label>
+                        <input type="range" id="display_brightness" min="0" max="100" value="50">
+                        <span id="brightness_value">50</span>%
+                    </div>
+                    <div class="form-group">
+                        <label for="auto_brightness">Auto Brightness:</label>
+                        <input type="checkbox" id="auto_brightness">
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>Clock Plugin</h3>
+                    <div class="form-group">
+                        <label for="clock_enabled">Enabled:</label>
+                        <input type="checkbox" id="clock_enabled" checked>
+                    </div>
+                    <div class="form-group">
+                        <label for="clock_24h">24-hour Format:</label>
+                        <input type="checkbox" id="clock_24h" checked>
+                    </div>
+                    <div class="form-group">
+                        <label for="clock_seconds">Show Seconds:</label>
+                        <input type="checkbox" id="clock_seconds">
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" onclick="saveConfig()">💾 Save Configuration</button>
+                    <button type="button" onclick="loadConfig()">📥 Load Current Config</button>
+                    <button type="button" onclick="toggleConfigForm()">❌ Cancel</button>
+                </div>
+            </form>
+        </div>
+        
         <div class="footer">
             <strong>💾 Memory:</strong> """ + str(gc.mem_free()) + """ bytes free<br>
             <strong>🔧 Configuration:</strong> Edit config.json and settings.toml to customize<br>
-            <strong>📝 Logs:</strong> Check serial console for detailed information
+            <strong>📝 Logs:</strong> Check serial console for detailed information<br>
+            <strong>💡 Tip:</strong> If config saves fail, disconnect USB and restart device
         </div>
     </div>
     
     <script>
         let statusData = null;
+        let configData = null;
         
         async function getStatus() {
             try {
@@ -308,6 +458,113 @@ class SimpleWebServer:
                 viewer.style.display = 'none';
             }
         }
+        
+        function toggleConfigForm() {
+            const form = document.getElementById('configForm');
+            if (form.style.display === 'none' || !form.style.display) {
+                form.style.display = 'block';
+                loadConfig(); // Load current config when opening form
+            } else {
+                form.style.display = 'none';
+            }
+        }
+        
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                configData = await response.json();
+                
+                // Populate form fields
+                document.getElementById('rotation_interval').value = configData.system?.rotation_interval || 5;
+                document.getElementById('timezone').value = configData.system?.timezone || 'UTC';
+                document.getElementById('display_brightness').value = configData.system?.display_brightness || 50;
+                document.getElementById('brightness_value').textContent = configData.system?.display_brightness || 50;
+                document.getElementById('auto_brightness').checked = configData.display?.brightness?.auto || false;
+                document.getElementById('clock_enabled').checked = configData.plugins?.clock?.enabled !== false;
+                document.getElementById('clock_24h').checked = configData.plugins?.clock?.format_24h !== false;
+                document.getElementById('clock_seconds').checked = configData.plugins?.clock?.display_seconds || false;
+                
+                console.log('Configuration loaded:', configData);
+            } catch (error) {
+                alert('Error loading configuration: ' + error.message);
+            }
+        }
+        
+        async function saveConfig() {
+            try {
+                // Build configuration object from form
+                const newConfig = {
+                    system: {
+                        wifi_ssid: configData?.system?.wifi_ssid || "",
+                        wifi_password: configData?.system?.wifi_password || "",
+                        display_brightness: parseInt(document.getElementById('display_brightness').value),
+                        rotation_interval: parseInt(document.getElementById('rotation_interval').value),
+                        timezone: document.getElementById('timezone').value
+                    },
+                    display: {
+                        width: 64,
+                        height: 64,
+                        bit_depth: 6,
+                        brightness: {
+                            auto: document.getElementById('auto_brightness').checked,
+                            manual: parseInt(document.getElementById('display_brightness').value) / 100,
+                            day: 0.8,
+                            night: 0.2
+                        }
+                    },
+                    network: configData?.network || {
+                        timeout: 10,
+                        retry_count: 3,
+                        retry_delay: 5
+                    },
+                    web: {
+                        port: 80,
+                        enabled: true
+                    },
+                    plugins: {
+                        clock: {
+                            enabled: document.getElementById('clock_enabled').checked,
+                            display_seconds: document.getElementById('clock_seconds').checked,
+                            format_24h: document.getElementById('clock_24h').checked
+                        }
+                    }
+                };
+                
+                // Send POST request
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(newConfig)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('Configuration saved successfully!');
+                    toggleConfigForm(); // Close form
+                } else {
+                    if (result.errno === 30) {
+                        alert('Cannot save configuration: Filesystem is read-only.\\n\\nTo fix this:\\n1. Disconnect USB cable from computer\\n2. Restart the MatrixPortal S3 device\\n3. Connect to WiFi and try again');
+                    } else {
+                        alert('Error saving configuration: ' + (result.error || 'Unknown error'));
+                    }
+                }
+            } catch (error) {
+                alert('Error saving configuration: ' + error.message);
+            }
+        }
+        
+        // Update brightness display
+        document.addEventListener('DOMContentLoaded', function() {
+            const brightnessSlider = document.getElementById('display_brightness');
+            const brightnessValue = document.getElementById('brightness_value');
+            
+            brightnessSlider.addEventListener('input', function() {
+                brightnessValue.textContent = this.value;
+            });
+        });
         
         // Auto-refresh page every 60 seconds
         setTimeout(() => window.location.reload(), 60000);
@@ -356,6 +613,88 @@ class SimpleWebServer:
                 return httpserver.JSONResponse(request, {"error": "Config manager not available"}, status=500)
         except Exception as e:
             return httpserver.JSONResponse(request, {"error": str(e)}, status=500)
+    
+    def _update_config_response(self, request):
+        """Update configuration data"""
+        print("POST /api/config received")
+        
+        # Initialize all variables at the start to avoid scope issues
+        config_data = None
+        body = None
+        body_str = None
+        
+        try:
+            if not self.config_manager:
+                print("Config manager not available")
+                return self._create_json_response(request, {"error": "Config manager not available"}, 500)
+            
+            # Get the request body
+            try:
+                body = request.body
+                print(f"Got body via request.body: {type(body)}")
+            except Exception as e:
+                print(f"Error accessing request body: {e}")
+                return self._create_json_response(request, {"error": f"Error accessing request body: {str(e)}"}, 400)
+            
+            if not body:
+                print("No body data provided")
+                return self._create_json_response(request, {"error": "No data provided"}, 400)
+            
+            # Parse JSON data
+            print(f"Parsing body of type: {type(body)}")
+            
+            try:
+                if isinstance(body, (bytes, bytearray)):
+                    body_str = body.decode('utf-8')
+                    print(f"Decoded body: {body_str[:100]}...")
+                    config_data = json.loads(body_str)
+                    print("Successfully parsed JSON from bytes")
+                elif isinstance(body, str):
+                    config_data = json.loads(body)
+                    print("Successfully parsed JSON from string")
+                else:
+                    config_data = body
+                    print(f"Body already parsed as: {type(body)}")
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                print(f"Parsing error: {e}")
+                return self._create_json_response(request, {"error": f"Invalid JSON: {str(e)}"}, 400)
+            
+            # Validate configuration
+            print(f"Validating config structure, type: {type(config_data)}")
+            if not isinstance(config_data, dict):
+                print("Config is not a dictionary")
+                return self._create_json_response(request, {"error": "Configuration must be a JSON object"}, 400)
+            
+            print("Running config validation")
+            if not self.config_manager.validate_config(config_data):
+                print("Config validation failed")
+                return self._create_json_response(request, {"error": "Configuration validation failed"}, 400)
+            
+            # Save configuration
+            print("Config validation passed, attempting to save")
+            try:
+                success = self.config_manager.save_config(config_data)
+                if success:
+                    print("Config saved successfully")
+                    return httpserver.JSONResponse(request, {"success": True, "message": "Configuration updated successfully"})
+                else:
+                    print("Config save returned False")
+                    return self._create_json_response(request, {"error": "Failed to save configuration"}, 500)
+            except OSError as os_error:
+                print(f"OSError during config save: {os_error}, errno: {os_error.errno}")
+                if os_error.errno == 30:  # Read-only filesystem
+                    return self._create_json_response(request, {
+                        "error": "Read-only filesystem. Disconnect USB cable and restart device to make filesystem writable.",
+                        "errno": 30
+                    }, 500)
+                else:
+                    return self._create_json_response(request, {"error": f"Filesystem error: {str(os_error)}"}, 500)
+                
+        except Exception as e:
+            print(f"Unexpected error in _update_config_response: {e}")
+            import traceback
+            traceback.print_exception(type(e), e, e.__traceback__)
+            return self._create_json_response(request, {"error": str(e)}, 500)
     
     def _get_signal_strength(self):
         """Get WiFi signal strength as formatted string"""
