@@ -3,3 +3,6 @@ backup/**
 .vscode/*
 .git/**
 images_orig/**
+*.md
+__pycache__
+*.template

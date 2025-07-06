@@ -13,7 +13,7 @@ import gc
 class DisplayEngine:
     """Manages RGB LED matrix display with double buffering"""
     
-    def __init__(self, width: int = 64, height: int = 64, bit_depth: int = 6):
+    def __init__(self, width=64, height=64, bit_depth=6):
         self.width = width
         self.height = height
         self.bit_depth = bit_depth
@@ -34,6 +34,10 @@ class DisplayEngine:
         # Initialize display
         self._init_display()
         self._init_buffers()
+        
+        # Clear display on startup
+        self.clear()
+        self.update()
         
         print(f"Display engine initialized: {width}x{height}, {bit_depth}-bit")
     
@@ -148,7 +152,7 @@ class DisplayEngine:
             b = ((i - 16) * 11) % 256
             self.palette[i] = (r << 16) | (g << 8) | b
     
-    def clear(self, color: int = 0):
+    def clear(self, color=0):
         """Clear the current buffer"""
         if self.current_buffer:
             self.current_buffer.fill(color)
@@ -181,12 +185,12 @@ class DisplayEngine:
         except Exception as e:
             print(f"Display update error: {e}")
     
-    def set_pixel(self, x: int, y: int, color: int):
+    def set_pixel(self, x, y, color):
         """Set a single pixel in the current buffer"""
         if 0 <= x < self.width and 0 <= y < self.height:
             self.current_buffer[x, y] = color
     
-    def draw_line(self, x0: int, y0: int, x1: int, y1: int, color: int):
+    def draw_line(self, x0, y0, x1, y1, color):
         """Draw a line using Bresenham's algorithm"""
         dx = abs(x1 - x0)
         dy = abs(y1 - y0)
@@ -212,7 +216,7 @@ class DisplayEngine:
                 err += dx
                 y0 += sy
     
-    def draw_rect(self, x: int, y: int, width: int, height: int, color: int, filled: bool = False):
+    def draw_rect(self, x, y, width, height, color, filled=False):
         """Draw a rectangle"""
         if filled:
             for py in range(y, y + height):
@@ -229,7 +233,7 @@ class DisplayEngine:
                 self.set_pixel(x, py, color)
                 self.set_pixel(x + width - 1, py, color)
     
-    def draw_text(self, text: str, x: int, y: int, color: int = 1, font=None):
+    def draw_text(self, text, x, y, color=1, font=None):
         """Draw text at specified position"""
         if font is None:
             font = terminalio.FONT
@@ -247,24 +251,24 @@ class DisplayEngine:
         # render the text to your bitmap buffer
         return label
     
-    def scroll_text(self, text: str, y: int, color: int = 1, speed: int = 1):
+    def scroll_text(self, text, y, color=1, speed=1):
         """Scroll text horizontally across the display"""
         # This would be implemented with a proper scrolling mechanism
         # For now, just a placeholder
         pass
     
-    def set_brightness(self, brightness: float):
+    def set_brightness(self, brightness):
         """Set display brightness (0.0 to 1.0)"""
         if hasattr(self.display, 'brightness'):
             self.display.brightness = max(0.0, min(1.0, brightness))
     
-    def get_palette_color(self, index: int) -> int:
+    def get_palette_color(self, index):
         """Get color from palette"""
         if 0 <= index < len(self.palette):
             return self.palette[index]
         return 0
     
-    def find_color_index(self, rgb_color: int) -> int:
+    def find_color_index(self, rgb_color):
         """Find closest color index in palette"""
         # Simple approach - find exact match or return closest
         for i, color in enumerate(self.palette):
@@ -274,7 +278,7 @@ class DisplayEngine:
         # If no exact match, return closest basic color
         return self._find_closest_color(rgb_color)
     
-    def _find_closest_color(self, target_color: int) -> int:
+    def _find_closest_color(self, target_color):
         """Find closest color in basic palette"""
         target_r = (target_color >> 16) & 0xFF
         target_g = (target_color >> 8) & 0xFF

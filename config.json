@@ -1,0 +1,37 @@
+{
+  "system": {
+    "wifi_ssid": "${WIFI_SSID}",
+    "wifi_password": "${WIFI_PASSWORD}",
+    "display_brightness": 50,
+    "rotation_interval": 5,
+    "timezone": "UTC"
+  },
+  "display": {
+    "width": 64,
+    "height": 64,
+    "bit_depth": 4,
+    "brightness": {
+      "auto": false,
+      "manual": 0.5,
+      "day": 0.8,
+      "night": 0.2
+    }
+  },
+  "network": {
+    "timeout": 10,
+    "retry_count": 3,
+    "retry_delay": 5
+  },
+  "web": {
+    "port": 80,
+    "enabled": true
+  },
+  "plugins": {
+    "clock": {
+      "enabled": true,
+      "display_seconds": true,
+      "format_24h": true,
+      "display_date": false
+    }
+  }
+}

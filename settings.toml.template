@@ -1,0 +1,14 @@
+# CircuitPython settings template
+# Copy this file to settings.toml and fill in your actual values
+# settings.toml is gitignored and will not be committed
+
+# WiFi Configuration
+WIFI_SSID = "your_wifi_network_name"
+WIFI_PASSWORD = "your_wifi_password"
+
+# Future API keys and secrets
+# CRICKET_API_KEY = "your_cricket_api_key"
+# MQTT_USERNAME = "your_mqtt_username" 
+# MQTT_PASSWORD = "your_mqtt_password"
+# F1_API_KEY = "your_f1_api_key"
+# HEALTH_API_TOKEN = "your_health_api_token"

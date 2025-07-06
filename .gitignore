@@ -2,3 +2,4 @@ settings.toml
 .vscode
 backup
 images_orig
+__pycache__

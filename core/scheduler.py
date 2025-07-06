@@ -5,12 +5,11 @@ Manages plugin rotation, timing, and asyncio task coordination
 import asyncio
 import time
 import gc
-from typing import Dict, List, Optional, Any
 from .plugin_interface import PluginInterface, PluginManager
 
 class PluginTask:
     """Represents a scheduled plugin task"""
-    def __init__(self, plugin: PluginInterface, task_type: str = "pull"):
+    def __init__(self, plugin, task_type="pull"):
         self.plugin = plugin
         self.task_type = task_type  # "pull" or "display"
         self.task = None
@@ -31,7 +30,7 @@ class PluginTask:
 class DisplayScheduler:
     """Manages display rotation and plugin scheduling"""
     
-    def __init__(self, display_engine, plugin_manager: PluginManager):
+    def __init__(self, display_engine, plugin_manager):
         self.display_engine = display_engine
         self.plugin_manager = plugin_manager
         self.active_plugins = {}  # name -> PluginTask
@@ -44,7 +43,7 @@ class DisplayScheduler:
         self.tasks = set()
         self.display_task = None
         
-    def add_plugin(self, plugin: PluginInterface):
+    def add_plugin(self, plugin):
         """Add a plugin to the scheduler"""
         if not plugin.enabled:
             return
@@ -63,7 +62,7 @@ class DisplayScheduler:
         
         print(f"Added plugin to scheduler: {metadata.name}")
     
-    def remove_plugin(self, plugin_name: str):
+    def remove_plugin(self, plugin_name):
         """Remove a plugin from the scheduler"""
         # Remove both pull and display tasks
         for task_name in list(self.active_plugins.keys()):
@@ -79,7 +78,7 @@ class DisplayScheduler:
             
         print(f"Removed plugin from scheduler: {plugin_name}")
     
-    def update_plugin_config(self, plugin_name: str, config: Dict[str, Any]):
+    def update_plugin_config(self, plugin_name, config):
         """Update plugin configuration"""
         # Find and update plugin
         for task_name, task in self.active_plugins.items():
@@ -251,7 +250,7 @@ class DisplayScheduler:
                 print(f"Error in pull task loop for {plugin_task.plugin.metadata.name}: {e}")
                 await asyncio.sleep(5)
     
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self):
         """Get scheduler status"""
         return {
             "running": self.running,
@@ -262,7 +261,7 @@ class DisplayScheduler:
             "tasks": len(self.tasks)
         }
     
-    def set_rotation_time(self, seconds: int):
+    def set_rotation_time(self, seconds):
         """Set display rotation time"""
         self.display_rotation_time = max(1, seconds)
         print(f"Display rotation time set to {self.display_rotation_time} seconds")

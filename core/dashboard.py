@@ -9,7 +9,7 @@ from .display import DisplayEngine
 from .scheduler import DisplayScheduler
 from .plugin_interface import PluginManager
 from .config import ConfigManager
-from .webserver import WebServer
+from .simple_webserver import SimpleWebServer
 from .network import NetworkManager
 
 class Dashboard:
@@ -41,8 +41,12 @@ class Dashboard:
             self.config_manager = ConfigManager()
             self.config = self.config_manager.load_config()
             
-            # Network manager
-            self.network_manager = NetworkManager(self.config.get('network', {}))
+            # Network manager - merge network and system config for WiFi credentials
+            network_config = self.config.get('network', {}).copy()
+            system_config = self.config.get('system', {})
+            network_config['ssid'] = system_config.get('wifi_ssid', '')
+            network_config['password'] = system_config.get('wifi_password', '')
+            self.network_manager = NetworkManager(network_config)
             
             # Plugin manager
             self.plugin_manager = PluginManager()
@@ -61,7 +65,7 @@ class Dashboard:
             
             # Web server
             web_config = self.config.get('web', {})
-            self.web_server = WebServer(
+            self.web_server = SimpleWebServer(
                 port=web_config.get('port', 80),
                 config_manager=self.config_manager,
                 plugin_manager=self.plugin_manager,
