@@ -9,7 +9,7 @@ from .display import DisplayEngine
 from .scheduler import DisplayScheduler
 from .plugin_interface import PluginManager
 from .config import ConfigManager
-from .simple_webserver import SimpleWebServer
+from .simple_webserver import WebServer
 from .network import NetworkManager
 
 class Dashboard:
@@ -65,7 +65,7 @@ class Dashboard:
             
             # Web server
             web_config = self.config.get('web', {})
-            self.web_server = SimpleWebServer(
+            self.web_server = WebServer(
                 port=web_config.get('port', 80),
                 config_manager=self.config_manager,
                 plugin_manager=self.plugin_manager,
@@ -183,6 +183,10 @@ class Dashboard:
     
     async def _update_loop(self):
         """Main update loop"""
+        # Poll web server for incoming requests
+        if self.web_server:
+            self.web_server.poll()
+        
         # Periodic tasks
         await self._periodic_tasks()
         
