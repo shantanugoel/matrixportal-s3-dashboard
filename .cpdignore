@@ -1,0 +1,5 @@
+backup/*
+backup/**
+.vscode/*
+.git/**
+images_orig/**
