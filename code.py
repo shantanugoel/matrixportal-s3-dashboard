@@ -8,6 +8,7 @@ import supervisor
 import microcontroller
 import watchdog
 import traceback
+import sys
 from core.dashboard import Dashboard
 
 # Global constants
@@ -65,6 +66,7 @@ def main():
             
         except KeyboardInterrupt:
             print("Keyboard interrupt - shutting down")
+            sys.exit(0)
             break
             
         except Exception as e:

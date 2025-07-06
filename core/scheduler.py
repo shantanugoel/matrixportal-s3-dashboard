@@ -6,6 +6,7 @@ import asyncio
 import time
 import gc
 from .plugin_interface import PluginInterface, PluginManager
+import sys
 
 class PluginTask:
     """Represents a scheduled plugin task"""
@@ -158,6 +159,11 @@ class DisplayScheduler:
             except Exception as e:
                 print(f"Error in scheduler main loop: {e}")
                 await asyncio.sleep(1)
+
+            except KeyboardInterrupt:
+                print("Received KeyboardInterrupt, shutting down...")
+                await self.stop()
+                sys.exit(0)
     
     def _should_rotate_display(self) -> bool:
         """Check if it's time to rotate to next plugin"""

@@ -5,6 +5,7 @@ Coordinates all system components and manages the overall application lifecycle
 import asyncio
 import time
 import gc
+import sys
 from .display import DisplayEngine
 from .scheduler import DisplayScheduler
 from .plugin_interface import PluginManager
@@ -88,6 +89,7 @@ class Dashboard:
             
         except KeyboardInterrupt:
             print("Dashboard interrupted by user")
+            sys.exit(0)
             
         except Exception as e:
             print(f"Dashboard error: {e}")
@@ -118,6 +120,9 @@ class Dashboard:
         except Exception as e:
             print(f"Main loop error: {e}")
             raise
+
+        except KeyboardInterrupt:
+            print("Main loop interrupted by user")
         
         finally:
             await self._cleanup()
