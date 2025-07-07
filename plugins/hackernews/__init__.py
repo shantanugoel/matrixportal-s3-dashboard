@@ -153,11 +153,6 @@ class Plugin(PluginInterface):
             # Render title
             draw_text(display_buffer, title, title_x, region_y + 2, white, available_width)
             
-            # Render score on second line if space
-            if region_height >= 12:
-                score_text = f"{self.current_story['score']} pts"
-                draw_text(display_buffer, score_text, region_x + 2, region_y + 10, gray)
-            
             return True
             
         except Exception as e:
