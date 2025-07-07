@@ -1,7 +1,13 @@
 import json
 import gc
 from core.plugin_interface import PluginInterface, PluginMetadata
-from core.fonts import draw_text, draw_char
+try:
+    from core.flexible_fonts import fit_and_draw_text
+    FLEXIBLE_FONTS = True
+except:
+    from core.fonts import draw_text
+    FLEXIBLE_FONTS = False
+    print("Using fallback fonts for weather")
 
 class Plugin(PluginInterface):
     def __init__(self, config):
@@ -80,15 +86,24 @@ class Plugin(PluginInterface):
                 for x in range(region_x, min(region_x + region_width, width)):
                     display_buffer[x, y] = 0
             
-            # Simple text rendering (placeholder - in real implementation would use bitmap fonts)
+            # Prepare text for rendering
             temp_text = f"{self.weather_data['temp']}C"
-            condition_text = self.weather_data['condition'][:12]  # Truncate
+            condition_text = self.weather_data['condition']  # Let font system handle truncation
             
-            # Render temperature in region
-            draw_text(display_buffer, temp_text, region_x + 2, region_y + 2, yellow, region_width - 16)
-            
-            # Render condition below temperature  
-            draw_text(display_buffer, condition_text, region_x + 2, region_y + 10, white, region_width - 4)
+            # Render temperature in region (top line)
+            if FLEXIBLE_FONTS:
+                fit_and_draw_text(display_buffer, temp_text, 
+                                 region_x + 2, region_y + 2, 
+                                 region_width - 16, 6, yellow, 1)
+                
+                # Render condition below temperature (bottom line with smart fitting)
+                fit_and_draw_text(display_buffer, condition_text, 
+                                 region_x + 2, region_y + 10,
+                                 region_width - 4, 6, white, 1)
+            else:
+                # Fallback to simple font
+                draw_text(display_buffer, temp_text, region_x + 2, region_y + 2, yellow, region_width - 16)
+                draw_text(display_buffer, condition_text, region_x + 2, region_y + 10, white, region_width - 4)
             
             # Simple weather icon placeholder (a few pixels representing weather)
             icon_x = region_x + region_width - 10

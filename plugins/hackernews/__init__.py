@@ -2,7 +2,13 @@ import json
 import gc
 import time
 from core.plugin_interface import PluginInterface, PluginMetadata
-from core.fonts import draw_text, draw_char, get_text_width, truncate_text
+try:
+    from core.flexible_fonts import fit_and_draw_text
+    FLEXIBLE_FONTS = True
+except:
+    from core.fonts import draw_text
+    FLEXIBLE_FONTS = False
+    print("Using fallback fonts for hackernews")
 
 class Plugin(PluginInterface):
     def __init__(self, config):
@@ -140,18 +146,26 @@ class Plugin(PluginInterface):
             # Prepare title text
             title = self.current_story["title"]
             
-            # Calculate available space for title (after "HN: " prefix)
-            title_x = region_x + 18  # After "HN: "
-            available_width = region_width - 18 - 2  # Minus prefix and margin
+            # Use most of the region for the title (3 lines max)
+            title_area_width = region_width - 4  # Small margin
+            title_area_height = region_height - 2  # Small margin
             
-            # Truncate title to fit
-            title = truncate_text(title, available_width)
-            
-            # Render "HN:" prefix
-            draw_text(display_buffer, "HN:", region_x + 2, region_y + 2, orange)
-            
-            # Render title
-            draw_text(display_buffer, title, title_x, region_y + 2, white, available_width)
+            if FLEXIBLE_FONTS:
+                # Render "HN:" prefix on first line
+                fit_and_draw_text(display_buffer, "HN:", 
+                                 region_x + 2, region_y + 1, 
+                                 15, 6, orange, 1)
+                
+                # Render title starting after "HN: " prefix, using up to 3 lines
+                fit_and_draw_text(display_buffer, title, 
+                                 region_x + 18, region_y + 1,
+                                 title_area_width - 18, title_area_height, white, 3)
+            else:
+                # Fallback to simple font
+                draw_text(display_buffer, "HN:", region_x + 2, region_y + 2, orange)
+                # Truncate title for fallback
+                title_short = title[:8] + "..." if len(title) > 8 else title
+                draw_text(display_buffer, title_short, region_x + 18, region_y + 2, white)
             
             return True
             
