@@ -454,25 +454,37 @@ class NetworkManager:
         return False
     
     async def fetch_json(self, url, timeout=30):
-        """Fetch JSON data from a URL"""
+        """Fetch JSON data from a URL with retry for EINPROGRESS"""
         if not self.is_connected() or not self.socket_pool:
             return None
             
-        try:
-            import adafruit_requests
-            
-            requests = adafruit_requests.Session(self.socket_pool, self.ssl_context)
-            response = requests.get(url, timeout=timeout)
-            
-            if response.status_code == 200:
-                data = response.json()
-                response.close()
-                return data
-            else:
-                print(f"HTTP error {response.status_code} for {url}")
-                response.close()
-                return None
+        import adafruit_requests
+        requests = adafruit_requests.Session(self.socket_pool, self.ssl_context)
+        
+        for attempt in range(3): # Try up to 3 times
+            try:
+                response = requests.get(url, timeout=timeout)
                 
-        except Exception as e:
-            print(f"Error fetching {url}: {e}")
-            return None
+                if response.status_code == 200:
+                    data = response.json()
+                    response.close()
+                    return data
+                else:
+                    print(f"HTTP error {response.status_code} for {url}")
+                    response.close()
+                    return None
+            
+            except OSError as e:
+                if e.errno == 119: # EINPROGRESS
+                    print(f"Network operation in progress, retrying... (attempt {attempt + 1})")
+                    await asyncio.sleep(2) # Wait before retrying
+                    continue
+                else:
+                    print(f"Unhandled OSError fetching {url}: {e}")
+                    return None
+            except Exception as e:
+                print(f"Error fetching {url}: {e}")
+                return None
+        
+        print(f"Failed to fetch {url} after multiple retries.")
+        return None

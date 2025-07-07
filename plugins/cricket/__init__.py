@@ -31,12 +31,13 @@ class Plugin(PluginInterface):
         )
 
     async def pull(self):
-        """Fetch and process cricket match data."""
+        """Fetch and process cricket match data from a reliable RSS feed."""
         if not self.network or not self.network.is_connected():
             return None
 
         team_code = self.config.get("team", "").upper()
-        rss_url = self.config.get("rss_url")
+        # Using a general cricket RSS feed
+        rss_url = "https://www.espncricinfo.com/rss/content/story/feeds/0.xml"
         api_url = f"https://api.rss2json.com/v1/api.json?rss_url={rss_url}"
 
         try:
@@ -47,32 +48,17 @@ class Plugin(PluginInterface):
 
             items = response.get('items', [])
             
-            live_match = None
-            upcoming_match = None
-            last_result = None
-
+            relevant_match = None
             for item in items:
                 title = item.get('title', '')
-                if team_code in title:
-                    if "live" in item.get('description', '').lower() or "innings" in title.lower():
-                        live_match = item
-                        break # Live match takes highest priority
-                    elif "vs" in title.lower():
-                        # Simple assumption: if not live and has 'vs', it's upcoming
-                        if not upcoming_match: upcoming_match = item
-                    else:
-                        # Assume it's a result
-                        if not last_result: last_result = item
+                if team_code in title.upper():
+                    relevant_match = item
+                    break 
             
-            if live_match:
-                self.display_mode = "live"
-                self.match_data = self._parse_title(live_match['title'])
-            elif upcoming_match:
-                self.display_mode = "upcoming"
-                self.match_data = self._parse_title(upcoming_match['title'])
-            elif last_result:
-                self.display_mode = "last_result"
-                self.match_data = self._parse_title(last_result['title'])
+            if relevant_match:
+                # Simplified logic: show the latest news/score for the team
+                self.display_mode = "live" # Use 'live' to show with a green prefix
+                self.match_data = self._parse_title(relevant_match['title'])
             else:
                 self.display_mode = "idle"
                 self.match_data = {"text": f"No {team_code} match found"}

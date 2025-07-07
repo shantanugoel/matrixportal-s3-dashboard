@@ -30,58 +30,31 @@ class Plugin(PluginInterface):
         )
 
     async def pull(self):
-        """Fetch and process F1 race data from Ergast API."""
+        """Fetch and process F1 race data from an RSS feed."""
         if not self.network or not self.network.is_connected():
             return None
 
-        api_url = "http://ergast.com/api/f1/current.json"
+        # Using a more reliable RSS feed for F1 news
+        rss_url = "https://www.motorsport.com/rss/f1/news/"
+        api_url = f"https://api.rss2json.com/v1/api.json?rss_url={rss_url}"
 
         try:
             response = await self.network.fetch_json(api_url)
-            if not response or not response.get('MRData', {}).get('RaceTable', {}).get('Races'):
+            if not response or response.get('status') != 'ok' or not response.get('items'):
                 self.display_mode = "idle"
                 return None
 
-            races = response['MRData']['RaceTable']['Races']
+            items = response.get('items', [])
             now = time.time()
-            
-            live_race = None
-            upcoming_race = None
-            last_race = races[-1] if races else None
 
-            for race in races:
-                race_time_str = f"{race['date']}T{race['time']}"
-                # Ergast uses 'Z' for UTC, which we handle by replacing it
-                race_timestamp = time.mktime(time.strptime(race_time_str.replace('Z', ''), "%Y-%m-%dT%H:%M:%S"))
-                
-                # Check for a live race (assuming a race is "live" for 3 hours)
-                if now >= race_timestamp and now < race_timestamp + (3 * 3600):
-                    live_race = race
-                    break
-                
-                if race_timestamp > now:
-                    if not upcoming_race:
-                        upcoming_race = race
+            # Simplified logic: find the latest news item
+            latest_item = items[0] if items else None
             
-            if live_race:
-                self.display_mode = "live"
-                # For live, we'd ideally fetch live standings. For now, we show the race name.
-                # A real implementation would call another API endpoint for live data.
-                self.f1_data = {"text": f"{live_race['raceName']}"}
-            elif upcoming_race:
-                self.display_mode = "upcoming"
-                self.f1_data = {"text": f"{upcoming_race['raceName']} {upcoming_race['date']}"}
-            elif last_race:
-                self.display_mode = "last_result"
-                # Fetch last race results
-                last_race_url = "http://ergast.com/api/f1/current/last/results.json"
-                last_race_response = await self.network.fetch_json(last_race_url)
-                if last_race_response and last_race_response.get('MRData', {}).get('RaceTable', {}).get('Races'):
-                    results = last_race_response['MRData']['RaceTable']['Races'][0]['Results']
-                    winner = results[0]['Driver']['code']
-                    self.f1_data = {"text": f"{last_race['raceName']}: {winner} won"}
-                else:
-                    self.f1_data = {"text": f"Results for {last_race['raceName']}"}
+            if latest_item:
+                # We can't easily determine live/upcoming/last from a news feed,
+                # so we will just show the latest news item.
+                self.display_mode = "last_result" # Use this mode to display general news
+                self.f1_data = {"text": latest_item.get('title', 'No F1 News')}
             else:
                 self.display_mode = "idle"
                 self.f1_data = {"text": "No F1 data"}

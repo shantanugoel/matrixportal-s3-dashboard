@@ -88,18 +88,17 @@ class ScreenScheduler:
                 current_screen = self.screen_manager.get_current_screen()
                 
                 if current_screen:
-                    # Render current screen
+                    # Clear buffer before rendering
                     buffer = self.display_engine.get_buffer()
-                    width, height = self.display_engine.get_dimensions()
+                    buffer.fill(0) # Clear with black
                     
-                    success = self.screen_manager.render_screen(
+                    # Render the screen's plugins into the buffer
+                    width, height = self.display_engine.get_dimensions()
+                    self.screen_manager.render_screen(
                         current_screen, buffer, width, height)
                     
-                    if success:
-                        self.display_engine.update()
-                    else:
-                        # Clear display if render failed
-                        self.display_engine.clear()
+                    # Always update the display with the (now cleared and possibly rendered) buffer
+                    self.display_engine.update()
                 
                 # Calculate sleep time to maintain target FPS
                 loop_time = time.monotonic() - loop_start
