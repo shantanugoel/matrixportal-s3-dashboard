@@ -33,7 +33,7 @@
         {
           "name": "weather",
           "position": "top",
-          "height": 20,
+          "height": 12,
           "width": 64,
           "x": 0,
           "y": 0,
@@ -46,10 +46,10 @@
         {
           "name": "clock",
           "position": "center", 
-          "height": 20,
+          "height": 12,
           "width": 64,
           "x": 0,
-          "y": 21,
+          "y": 16,
           "config": {
             "enabled": true,
             "display_seconds": true,
@@ -62,17 +62,35 @@
           }
         },
         {
-          "name": "hackernews",
+          "name": "news",
           "position": "bottom",
-          "height": 22,
+          "height": 36,
           "width": 64,
           "x": 0,
-          "y": 42,
+          "y": 28,
+          "config": {
+            "enabled": true,
+            "rss_url": "https://feeds.bbci.co.uk/news/technology/rss.xml",
+            "article_rotation_minutes": 5
+          }
+        }
+      ]
+    },
+    "hn": {
+      "enabled": true,
+      "plugins": [
+        {
+          "name": "hackernews",
+          "position": "top",
+          "height": 64,
+          "width": 64,
+          "x": 0,
+          "y": 0,
           "config": {
             "enabled": true,
             "story_rotation_minutes": 5,
             "max_stories": 50,
-            "max_title_length": 60
+            "max_title_length": 100
           }
         }
       ]
