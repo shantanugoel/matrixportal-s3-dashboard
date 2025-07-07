@@ -259,12 +259,8 @@ class FontManager:
             char_width = layout['char_width']
             char_spacing = 1
             
-            print(f"Drawing bitmap text: {layout['lines']} at ({x},{y})")
-            
             for line_idx, line in enumerate(layout['lines']):
                 line_y = y + (line_idx * line_height)
-                
-                print(f"Drawing line {line_idx}: '{line}' at y={line_y}")
                 
                 # Skip if line is out of bounds
                 if max_height and line_y >= (y + max_height):
@@ -312,12 +308,9 @@ def fit_and_draw_text(buffer, text, x, y, max_width, max_height, color, max_line
         dict: Layout information used
     """
     try:
-        print(f"fit_and_draw_text: '{text}' at ({x},{y}) size {max_width}x{max_height} lines={max_lines}")
         layout = font_manager.get_best_font_for_text(text, max_width, max_height, max_lines)
-        print(f"Layout: {layout.get('fits', False)}, lines: {len(layout.get('lines', []))}")
         
         result = font_manager.draw_fitted_text(buffer, layout, x, y, color, max_width, max_height)
-        print(f"Draw result: {result}")
         return layout
     except Exception as e:
         print(f"Error in fit_and_draw_text: {e}")
