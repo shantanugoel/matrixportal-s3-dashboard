@@ -111,7 +111,6 @@ class ScreenScheduler:
                 await asyncio.sleep(1)
             except KeyboardInterrupt:
                 print("Received KeyboardInterrupt, shutting down...")
-                await self.stop()
                 sys.exit(0)
     
     async def _screen_pull_loop(self, screen):
