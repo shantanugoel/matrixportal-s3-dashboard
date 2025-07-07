@@ -153,8 +153,6 @@ class FontManager:
         effective_char_width = char_width + char_spacing
         chars_per_line = max_width // effective_char_width
         
-        print(f"_fit_bitmap_text: '{text}', max_width={max_width}, chars_per_line={chars_per_line}")
-        
         # If single line, try to fit as much as possible
         if max_lines == 1:
             if len(text) <= chars_per_line:
@@ -216,8 +214,6 @@ class FontManager:
             
             total_height = len(lines) * line_height
             fits = total_height <= max_height
-        
-        print(f"Result: chars_per_line={chars_per_line}, lines={lines}, fits={fits}")
         
         return {
             'fits': fits,
