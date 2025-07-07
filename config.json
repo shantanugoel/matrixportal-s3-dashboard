@@ -94,6 +94,34 @@
           }
         }
       ]
+    },
+    "sports": {
+      "enabled": true,
+      "plugins": [
+        {
+          "name": "f1",
+          "position": "top",
+          "height": 32,
+          "width": 64,
+          "x": 0,
+          "y": 0,
+          "config": {
+            "enabled": true
+          }
+        },
+        {
+          "name": "cricket",
+          "position": "bottom",
+          "height": 32,
+          "width": 64,
+          "x": 0,
+          "y": 32,
+          "config": {
+            "enabled": true,
+            "team": "IND"
+          }
+        }
+      ]
     }
   }
 }
