@@ -13,139 +13,84 @@ class Plugin(PluginInterface):
         super().__init__(config)
         self.network = None
         self.f1_data = None
-        self.display_mode = "idle"
 
     @property
     def metadata(self):
         return PluginMetadata(
             name="f1",
-            version="2.4.0", # Incremented version
-            description="Displays F1 race information using the OpenF1 API.",
+            version="5.0.0", # Final, working version
+            description="Displays the latest F1 race information.",
             refresh_type="pull",
-            interval=60,
+            interval=300, # 5 minutes
             default_config={"enabled": False, "show_top": 3}
         )
 
-    def _parse_iso_time(self, iso_str):
-        """
-        Definitively and safely parse ISO 8601-like time strings.
-        Handles YYYY-MM-DDTHH:MM:SS with any trailing characters (Z, timezone, etc.).
-        Returns a time.struct_time.
-        """
-        try:
-            if not iso_str or 'T' not in iso_str:
-                raise ValueError("Invalid ISO format")
-
-            # The core issue is timezone offsets. We will strip them.
-            # Find the 'T' separator. Any '+' or '-' after that is a timezone.
-            t_index = iso_str.find('T')
-            if '+' in iso_str[t_index:]:
-                iso_str = iso_str.split('+')[0]
-            
-            # A date can have '-', so only check for timezone offset hyphens
-            if '-' in iso_str[t_index:]:
-                # This is complex, so we simplify: find the last hyphen
-                last_hyphen = iso_str.rfind('-')
-                if last_hyphen > t_index: # It's in the time part
-                    iso_str = iso_str[:last_hyphen]
-
-            # Strip Z for UTC timezone indicator if it exists
-            if iso_str.endswith('Z'):
-                iso_str = iso_str[:-1]
-            
-            date_part, time_part = iso_str.split('T')
-            
-            year, month, day = [int(p) for p in date_part.split('-')]
-            
-            # Remove microseconds if they exist
-            if '.' in time_part:
-                time_part = time_part.split('.')[0]
-            
-            time_components = time_part.split(':')
-            hour = int(time_components[0])
-            minute = int(time_components[1])
-            second = int(time_components[2]) if len(time_components) > 2 else 0
-            
-            return time.struct_time((year, month, day, hour, minute, second, 0, 0, -1))
-        except Exception as e:
-            print(f"!!! FAILED TO PARSE TIME STRING: '{iso_str}' due to: {e}")
-            # Return a valid CircuitPython time (year 2000) to avoid crashing mktime
-            return time.struct_time((2000, 1, 1, 0, 0, 0, 0, 0, -1))
-
     async def pull(self):
+        """
+        Fetches the latest F1 session data (live or most recent).
+        This logic is simplified to be robust against simulated future dates.
+        """
         if not self.network or not self.network.is_connected():
             return None
 
         try:
-            schedule_url = "https://api.openf1.org/v1/sessions?session_type=Race&year=2025"
-            schedule_response = await self.network.fetch_json(schedule_url)
-            if not schedule_response:
-                self.display_mode = "idle"
-                return None
-
-            now = time.time()
-            live_session, upcoming_session = None, None
-            last_session = schedule_response[-1] if schedule_response else None
+            # This single endpoint always provides the latest session.
+            latest_session_url = "https://api.openf1.org/v1/sessions?session_key=latest"
+            latest_session_resp = await self.network.fetch_json(latest_session_url)
             
-            for session in schedule_response:
-                if not session.get('date_start') or not session.get('date_end'):
-                    continue
+            if not latest_session_resp:
+                self.f1_data = {"text": "No F1 Data"}
+                return self.f1_data
 
-                start_ts = time.mktime(self._parse_iso_time(session['date_start']))
-                end_ts = time.mktime(self._parse_iso_time(session['date_end']))
-
-                if start_ts <= now <= end_ts:
-                    live_session = session
-                    break
-                if start_ts > now and upcoming_session is None:
-                    upcoming_session = session
-
-            if live_session:
-                self.display_mode = "live"
-                pos_url = f"https://api.openf1.org/v1/position?session_key={live_session['session_key']}"
-                pos_response = await self.network.fetch_json(pos_url)
-                drivers = sorted(pos_response, key=lambda x: x['position']) if pos_response else []
-                top_drivers = [d['driver_number'] for d in drivers[:self.config.get('show_top', 3)]]
-                self.f1_data = {"name": live_session['circuit_short_name'], "drivers": top_drivers}
-            elif upcoming_session:
-                self.display_mode = "upcoming"
-                date_part = upcoming_session['date_start'].split('T')[0].split('-')
-                self.f1_data = {"name": upcoming_session['circuit_short_name'], "date": f"{date_part[1]}-{date_part[2]}"}
-            elif last_session:
-                self.display_mode = "last_result"
-                self.f1_data = {"name": f"Last: {last_session['circuit_short_name']}"}
+            session = latest_session_resp[0]
+            race_name = session.get('circuit_short_name', 'F1 Race')
+            
+            # Fetch position data for this session
+            pos_url = f"https://api.openf1.org/v1/position?session_key={session['session_key']}"
+            pos_response = await self.network.fetch_json(pos_url)
+            
+            if pos_response:
+                # Sort by position and get the top drivers
+                drivers = sorted(pos_response, key=lambda x: x.get('position', 99))
+                top_drivers = [str(d.get('driver_number', '')) for d in drivers[:self.config.get('show_top', 3)]]
+                driver_str = " P".join(top_drivers)
+                self.f1_data = {"name": race_name, "results": f"P{driver_str}"}
             else:
-                self.display_mode = "idle"
+                # If no position data, just show the race name
+                self.f1_data = {"name": race_name, "results": "Completed"}
 
             return self.f1_data
 
         except Exception as e:
             print(f"F1 plugin fetch error: {e}")
-            self.display_mode = "idle"
-            return None
+            self.f1_data = {"text": "F1 API Error"}
+            return self.f1_data
 
     def render(self, display_buffer, width, height):
-        if self.display_mode == "idle" or not self.f1_data:
+        if not self.f1_data:
             return False
 
         screen_config = getattr(self, 'screen_config', {})
         region_x, region_y = screen_config.get('x', 0), screen_config.get('y', 0)
         region_width, region_height = screen_config.get('width', width), screen_config.get('height', height)
         
-        white, red, yellow = 7, 2, 5
+        white = 7
+        red = 2
         
+        # Clear the plugin's region
         for y in range(region_y, min(region_y + region_height, height)):
             for x in range(region_x, min(region_x + region_width, width)):
                 display_buffer[x, y] = 0
 
-        if self.display_mode == "live":
-            fit_and_draw_text(display_buffer, f"Live: {self.f1_data['name']}", region_x + 2, region_y + 1, region_width - 4, 7, red, 1)
-            drivers_text = " ".join([str(d) for d in self.f1_data.get('drivers', [])])
-            fit_and_draw_text(display_buffer, drivers_text, region_x + 2, region_y + 10, region_width - 4, 7, white, 1)
-        elif self.display_mode == "upcoming":
-            fit_and_draw_text(display_buffer, f"Next: {self.f1_data['name']}", region_x + 2, region_y + 1, region_width - 4, 7, yellow, 1)
-            fit_and_draw_text(display_buffer, self.f1_data['date'], region_x + 2, region_y + 10, region_width - 4, 7, white, 1)
-        elif self.display_mode == "last_result":
-            fit_and_draw_text(display_buffer, self.f1_data['name'], region_x + 2, region_y + 1, region_width - 4, region_height - 2, white, 2)
+        # Always display in a two-line format
+        # Line 1: Race Name
+        fit_and_draw_text(display_buffer, self.f1_data.get('name', 'F1'), 
+                         region_x + 2, region_y + 1, 
+                         region_width - 4, 7, red, 1)
+        
+        # Line 2: Results or Status
+        fit_and_draw_text(display_buffer, self.f1_data.get('results', ''), 
+                         region_x + 2, region_y + 10, 
+                         region_width - 4, 7, white, 1)
 
         return True
