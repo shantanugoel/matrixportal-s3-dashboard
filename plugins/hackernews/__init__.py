@@ -151,21 +151,15 @@ class Plugin(PluginInterface):
             title_area_height = region_height - 2  # Small margin
             
             if FLEXIBLE_FONTS:
-                # Render "HN:" prefix on first line
-                fit_and_draw_text(display_buffer, "HN:", 
-                                 region_x + 2, region_y + 1, 
-                                 15, 6, orange, 1)
-                
-                # Render title starting after "HN: " prefix, using up to 3 lines
+                # Render title, using up to 3 lines
                 fit_and_draw_text(display_buffer, title, 
-                                 region_x + 18, region_y + 1,
-                                 title_area_width - 18, title_area_height, white, 3)
+                                 region_x + 2, region_y + 1,
+                                 title_area_width, title_area_height, white, 3)
             else:
                 # Fallback to simple font
-                draw_text(display_buffer, "HN:", region_x + 2, region_y + 2, orange)
                 # Truncate title for fallback
-                title_short = title[:8] + "..." if len(title) > 8 else title
-                draw_text(display_buffer, title_short, region_x + 18, region_y + 2, white)
+                title_short = title[:12] + "..." if len(title) > 12 else title
+                draw_text(display_buffer, title_short, region_x + 2, region_y + 2, white)
             
             return True
             
