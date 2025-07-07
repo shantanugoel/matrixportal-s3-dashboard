@@ -127,9 +127,10 @@ class Plugin(PluginInterface):
             title_area_height = region_height - 2
             
             if FLEXIBLE_FONTS:
+                # Use all available space, with no line limit
                 fit_and_draw_text(display_buffer, title, 
                                  region_x + 2, region_y + 1,
-                                 title_area_width, title_area_height, white, 3)
+                                 title_area_width, title_area_height, white, max_lines=99) # Use a large number for max_lines
             else:
                 # Fallback to simple font
                 title_short = title[:12] + "..." if len(title) > 12 else title

@@ -320,12 +320,13 @@ class Plugin(PluginInterface):
             # Get time string
             time_str = self.data.get('time', '--:--')
             
-            # Calculate starting position to center the time within the region
+            # Calculate starting position to center the time horizontally
             char_width = 5
             char_spacing = 1
             total_width = len(time_str) * (char_width + char_spacing) - char_spacing
             start_x = region_x + (region_width - total_width) // 2
-            start_y = region_y + (region_height - 7) // 2  # 7 is digit height
+            # Use the exact y from the config, no vertical centering
+            start_y = region_y
             
             # Draw each character
             x_pos = start_x

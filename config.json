@@ -45,29 +45,26 @@
         },
         {
           "name": "clock",
-          "position": "center", 
-          "height": 12,
+          "position": "center",
+          "height": 7,
           "width": 64,
           "x": 0,
-          "y": 16,
+          "y": 14,
           "config": {
             "enabled": true,
             "display_seconds": true,
             "format_24h": true,
             "utc_offset_hours": 5.5,
-            "timezone_name": "IST",
-            "ntp_enabled": true,
-            "ntp_server": "pool.ntp.org",
-            "ntp_sync_interval": 3600
+            "timezone_name": "IST"
           }
         },
         {
           "name": "news",
           "position": "bottom",
-          "height": 36,
+          "height": 41,
           "width": 64,
           "x": 0,
-          "y": 28,
+          "y": 23,
           "config": {
             "enabled": true,
             "rss_url": "https://feeds.bbci.co.uk/news/technology/rss.xml",
