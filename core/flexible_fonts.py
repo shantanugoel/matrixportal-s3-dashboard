@@ -15,16 +15,15 @@ class FontManager:
         """Load available internal bitmap fonts"""
         self.fonts = {
             'large': fonts.FONT_5x7,
-            'medium': fonts.FONT_4x6,
             'tiny': fonts.FONT_3x5,
         }
-        print("Loaded internal bitmap fonts: large (5x7), medium (4x6), tiny (3x5)")
+        print("Loaded internal bitmap fonts: large (5x7), tiny (3x5)")
     
     def get_best_font_for_text(self, text, max_width, max_height, max_lines=1):
         """
         Find the best font size to fit text in the given constraints.
         """
-        font_priority = ['large', 'medium', 'tiny']
+        font_priority = ['large', 'tiny']
         
         for font_name in font_priority:
             font_info = self.fonts[font_name]
