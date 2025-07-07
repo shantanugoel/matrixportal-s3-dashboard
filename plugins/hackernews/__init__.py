@@ -151,10 +151,11 @@ class Plugin(PluginInterface):
             title_area_height = region_height - 2  # Small margin
             
             if FLEXIBLE_FONTS:
-                # Render title, using up to 3 lines
+                # Render title, using configurable word wrap
+                word_wrap = self.config.get("word_wrap", True)
                 fit_and_draw_text(display_buffer, title, 
                                  region_x + 2, region_y + 1,
-                                 title_area_width, title_area_height, white, 3)
+                                 title_area_width, title_area_height, white, 3, word_wrap=word_wrap)
             else:
                 # Fallback to simple font
                 # Truncate title for fallback

@@ -70,7 +70,8 @@
           "config": {
             "enabled": true,
             "rss_url": "https://feeds.bbci.co.uk/news/technology/rss.xml",
-            "article_rotation_minutes": 5
+            "article_rotation_minutes": 5,
+            "word_wrap": false
           }
         }
       ]

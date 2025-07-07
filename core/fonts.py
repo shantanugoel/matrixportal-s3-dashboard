@@ -147,23 +147,27 @@ FONT_3x5 = {
 
 def draw_text(buffer, text, x, y, color, font, max_width=None):
     """
-    Draw text using a specified bitmap font.
+    Draw text using a specified bitmap font with proportional spacing.
     """
-    char_width = font['width']
+    x_pos = x
     char_spacing = font['spacing']
-    total_width = 0
     
-    for i, char in enumerate(text.upper()):
-        char_x = x + (i * (char_width + char_spacing))
-        
-        if max_width and (char_x + char_width) > (x + max_width):
+    for char in text.upper():
+        if char not in font['data']:
+            char = '?'
+
+        pattern = font['data'][char]
+        char_width = len(pattern[0]) if pattern and pattern[0] else 0
+
+        if max_width and (x_pos + char_width) > (x + max_width):
             break
             
-        if char in font['data']:
-            draw_char(buffer, char, char_x, y, color, font)
-            total_width = char_x + char_width - x
+        draw_char(buffer, char, x_pos, y, color, font)
         
-    return total_width
+        # Advance the cursor by the width of the character just drawn, plus spacing
+        x_pos += char_width + char_spacing
+        
+    return x_pos - x
 
 def draw_char(buffer, char, x, y, color, font):
     """
