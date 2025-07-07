@@ -77,32 +77,5 @@
         }
       ]
     }
-  },
-  "plugins": {
-    "weather": {
-      "enabled": true,
-      "location": "auto",
-      "position": "top",
-      "height": 16,
-      "units": "metric"
-    },
-    "clock": {
-      "enabled": true,
-      "display_seconds": true,
-      "format_24h": true,
-      "utc_offset_hours": 5.5,
-      "timezone_name": "IST",
-      "ntp_enabled": true,
-      "ntp_server": "pool.ntp.org",
-      "ntp_sync_interval": 3600
-    },
-    "hackernews": {
-      "enabled": true,
-      "position": "bottom",
-      "height": 16,
-      "story_rotation_minutes": 5,
-      "max_stories": 50,
-      "max_title_length": 60
-    }
   }
 }
