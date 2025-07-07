@@ -2,96 +2,31 @@
 Flexible font system for MatrixPortal S3 Dashboard
 Supports multiple font files, dynamic sizing, and smart text fitting
 """
-
-import displayio
-
-try:
-    from adafruit_display_text import label
-    from adafruit_bitmap_font import bitmap_font
-    DISPLAY_TEXT_AVAILABLE = True
-except ImportError:
-    DISPLAY_TEXT_AVAILABLE = False
-    print("adafruit_display_text not available - using fallback font system")
-
-# Fallback to our bitmap fonts if display_text is not available
-from .fonts import FONT_5x7, draw_char
+from . import fonts
 
 class FontManager:
     """Manages multiple fonts and provides smart text fitting"""
     
     def __init__(self):
         self.fonts = {}
-        self.fallback_enabled = not DISPLAY_TEXT_AVAILABLE
-        
-        # Load available fonts
         self._load_fonts()
     
     def _load_fonts(self):
-        """Load available font files"""
-        if not DISPLAY_TEXT_AVAILABLE:
-            # Use our bitmap font as fallback
-            self.fonts['bitmap_5x7'] = {
-                'type': 'bitmap',
-                'width': 5,
-                'height': 7,
-                'spacing': 1
-            }
-            return
-        
-        # Try to load different font files
-        font_files = [
-            ('small', 'fonts/font5x8.pcf'),
-            ('medium', 'fonts/tom-thumb.pcf'), 
-            ('large', 'fonts/6x10.pcf'),
-            ('tiny', 'fonts/4x6.pcf')
-        ]
-        
-        for name, path in font_files:
-            try:
-                font = bitmap_font.load_font(path)
-                self.fonts[name] = {
-                    'type': 'pcf',
-                    'font': font,
-                    'path': path
-                }
-                print(f"Loaded font: {name} from {path}")
-            except Exception as e:
-                print(f"Could not load font {name}: {e}")
-        
-        # Fallback to built-in if no fonts loaded
-        if not self.fonts:
-            print("No PCF fonts found, using bitmap fallback")
-            self.fallback_enabled = True
-            self.fonts['bitmap_5x7'] = {
-                'type': 'bitmap', 
-                'width': 5,
-                'height': 7,
-                'spacing': 1
-            }
+        """Load available internal bitmap fonts"""
+        self.fonts = {
+            'large': fonts.FONT_5x7,
+            'medium': fonts.FONT_4x6,
+            'tiny': fonts.FONT_3x5,
+        }
+        print("Loaded internal bitmap fonts: large (5x7), medium (4x6), tiny (3x5)")
     
     def get_best_font_for_text(self, text, max_width, max_height, max_lines=1):
         """
-        Find the best font size to fit text in the given constraints
-        
-        Args:
-            text: Text to fit
-            max_width: Maximum width in pixels
-            max_height: Maximum height in pixels  
-            max_lines: Maximum number of lines allowed
-            
-        Returns:
-            dict: Font info and fitted text layout
+        Find the best font size to fit text in the given constraints.
         """
-        if self.fallback_enabled:
-            return self._fit_bitmap_text(text, max_width, max_height, max_lines)
-        
-        # Try fonts from largest to smallest
-        font_priority = ['large', 'medium', 'small', 'tiny']
+        font_priority = ['large', 'medium', 'tiny']
         
         for font_name in font_priority:
-            if font_name not in self.fonts:
-                continue
-                
             font_info = self.fonts[font_name]
             result = self._test_font_fit(font_info, text, max_width, max_height, max_lines)
             
@@ -99,228 +34,90 @@ class FontManager:
                 result['font_name'] = font_name
                 return result
         
-        # If nothing fits, use smallest font and truncate
-        smallest_font = self._get_smallest_font()
+        # If nothing fits, use the smallest font and truncate
+        smallest_font_name = 'tiny'
+        smallest_font = self.fonts[smallest_font_name]
         result = self._test_font_fit(smallest_font, text, max_width, max_height, max_lines)
-        result['font_name'] = smallest_font #'fallback'
-        result['fits'] = False  # Mark as not ideal fit
+        result['font_name'] = smallest_font_name
+        result['fits'] = False # Mark as not an ideal fit
         return result
-    
+
     def _test_font_fit(self, font_info, text, max_width, max_height, max_lines):
-        """Test if text fits with given font"""
-        if font_info['type'] == 'bitmap':
-            return self._fit_bitmap_text(text, max_width, max_height, max_lines)
-        
-        font = font_info['font']
-        
-        # Estimate character dimensions (this is approximate)
-        char_width = 6  # Approximate average character width
-        char_height = 8  # Approximate font height
-        
-        chars_per_line = max_width // char_width
-        total_chars = len(text)
-        needed_lines = (total_chars + chars_per_line - 1) // chars_per_line
-        
-        fits = needed_lines <= max_lines and (needed_lines * char_height) <= max_height
-        
-        # Break text into lines
-        lines = []
-        for i in range(0, len(text), chars_per_line):
-            lines.append(text[i:i + chars_per_line])
-            if len(lines) >= max_lines:
-                break
-        
-        # Truncate last line if needed
-        if len(lines) == max_lines and len(lines[-1]) > chars_per_line:
-            lines[-1] = lines[-1][:chars_per_line - 3] + "..."
-        
-        return {
-            'fits': fits,
-            'lines': lines[:max_lines],
-            'font': font,
-            'char_width': char_width,
-            'char_height': char_height,
-            'line_height': char_height + 1
-        }
-    
-    def _fit_bitmap_text(self, text, max_width, max_height, max_lines):
-        """Fit text using bitmap font"""
-        char_width = 5
-        char_height = 7
-        char_spacing = 1
+        """Test if text fits with a given bitmap font."""
+        char_width = font_info['width']
+        char_height = font_info['height']
+        char_spacing = font_info['spacing']
         line_height = char_height + 1
         
         effective_char_width = char_width + char_spacing
-        chars_per_line = max_width // effective_char_width
-        
-        # If single line, try to fit as much as possible
-        if max_lines == 1:
-            if len(text) <= chars_per_line:
-                lines = [text]
-                fits = True
+        chars_per_line = max_width // effective_char_width if effective_char_width > 0 else 0
+
+        # Word wrapping logic
+        lines = []
+        words = text.split(' ')
+        current_line = ""
+        for word in words:
+            # Handle very long words
+            if len(word) > chars_per_line:
+                if current_line:
+                    lines.append(current_line)
+                
+                # Split the long word
+                for i in range(0, len(word), chars_per_line):
+                    lines.append(word[i:i+chars_per_line])
+                current_line = ""
+                continue
+
+            test_line = current_line + (" " if current_line else "") + word
+            if len(test_line) <= chars_per_line:
+                current_line = test_line
             else:
-                # Try to fit without breaking words first
-                truncated = text[:chars_per_line]
-                # If we cut in the middle of a word, try to cut at word boundary
-                if chars_per_line > 3 and len(text) > chars_per_line:
-                    words = text.split(' ')
-                    current_line = ""
-                    for word in words:
-                        test_line = current_line + (" " if current_line else "") + word
-                        if len(test_line) <= chars_per_line:
-                            current_line = test_line
-                        else:
-                            break
-                    
-                    if current_line and len(current_line) >= chars_per_line - 3:
-                        # Use word boundary version
-                        lines = [current_line]
-                    else:
-                        # Use character truncation with ellipsis
-                        lines = [text[:chars_per_line-3] + "..."]
-                else:
-                    lines = [truncated]
-                fits = False
-        else:
-            # Multi-line text fitting
-            lines = []
-            words = text.split(' ')
-            current_line = ""
-            
-            for word in words:
-                test_line = current_line + (" " if current_line else "") + word
-                if len(test_line) <= chars_per_line:
-                    current_line = test_line
-                else:
-                    if current_line:
-                        lines.append(current_line)
-                        current_line = word[:chars_per_line]  # Start new line
-                    else:
-                        lines.append(word[:chars_per_line])  # Single word too long
-                    
-                    if len(lines) >= max_lines:
-                        break
-            
-            if current_line and len(lines) < max_lines:
                 lines.append(current_line)
-            
-            # Truncate to max lines
-            lines = lines[:max_lines]
-            
-            # Add ellipsis to last line if text was truncated
-            if len(lines) == max_lines and (len(' '.join(words)) > sum(len(line) for line in lines)):
-                if len(lines[-1]) > 3:
-                    lines[-1] = lines[-1][:-3] + "..."
-            
-            total_height = len(lines) * line_height
-            fits = total_height <= max_height
+                current_line = word
         
+        if current_line:
+            lines.append(current_line)
+
+        # Check if the number of lines and total height fit
+        total_height = len(lines) * line_height
+        fits = len(lines) <= max_lines and total_height <= max_height
+
+        # Truncate lines if they don't fit
+        if len(lines) > max_lines:
+            lines = lines[:max_lines]
+            # Add ellipsis if text was truncated
+            if len(lines[-1]) > 3:
+                 lines[-1] = lines[-1][:-3] + "..."
+
         return {
             'fits': fits,
             'lines': lines,
-            'font': 'bitmap',
+            'font': font_info,
+            'font_name': None, # Will be set by the calling function
             'char_width': char_width,
             'char_height': char_height,
             'line_height': line_height
         }
-    
-    def _get_smallest_font(self):
-        """Get the smallest available font"""
-        priority = ['tiny', 'small', 'medium', 'large', 'bitmap_5x7']
-        for font_name in priority:
-            if font_name in self.fonts:
-                return self.fonts[font_name]
-        return self.fonts['bitmap_5x7']  # Fallback
-    
+
     def draw_fitted_text(self, buffer, layout, x, y, color, max_width=None, max_height=None):
         """
-        Draw text using the layout from get_best_font_for_text
-        
-        Args:
-            buffer: Display buffer
-            layout: Result from get_best_font_for_text  
-            x, y: Starting position
-            color: Color index
-            max_width, max_height: Optional bounds checking
+        Draw text using the layout from get_best_font_for_text.
         """
-        if layout['font'] == 'bitmap' or self.fallback_enabled:
-            return self._draw_bitmap_text(buffer, layout, x, y, color, max_width, max_height)
-        else:
-            return self._draw_pcf_text(buffer, layout, x, y, color, max_width, max_height)
-    
-    def _draw_bitmap_text(self, buffer, layout, x, y, color, max_width, max_height):
-        """Draw text using bitmap font"""
-        try:
-            line_height = layout['line_height']
-            char_width = layout['char_width']
-            char_spacing = 1
-            
-            for line_idx, line in enumerate(layout['lines']):
-                line_y = y + (line_idx * line_height)
-                
-                # Skip if line is out of bounds
-                if max_height and line_y >= (y + max_height):
-                    print(f"Line {line_idx} out of bounds: {line_y} >= {y + max_height}")
-                    break
-                    
-                for char_idx, char in enumerate(line):
-                    char_x = x + (char_idx * (char_width + char_spacing))
-                    
-                    # Skip if character is out of bounds
-                    if max_width and char_x >= (x + max_width):
-                        break
-                    
-                    # Draw character using bitmap font
-                    if char.upper() in FONT_5x7:
-                        draw_char(buffer, char.upper(), char_x, line_y, color)
-            
-            return True
-        except Exception as e:
-            print(f"Error in _draw_bitmap_text: {e}")
-            return False
-    
-    def _draw_pcf_text(self, buffer, layout, x, y, color, max_width, max_height):
-        """Draw text using PCF font"""
         try:
             font = layout['font']
             line_height = layout['line_height']
             
             for line_idx, line in enumerate(layout['lines']):
                 line_y = y + (line_idx * line_height)
-                current_x = x
                 
-                # Skip if line is out of bounds
                 if max_height and line_y >= (y + max_height):
                     break
-                    
-                for char in line:
-                    glyph = font.get_glyph(ord(char))
-                    if not glyph:
-                        continue
-
-                    # Stop if we would draw past the right edge
-                    if max_width and (current_x + glyph.shift_x) > (x + max_width):
-                        break
-                        
-                    glyph_y = line_y + (font.get_bounding_box()[1] - glyph.height - glyph.dy)
-                    
-                    # Blit the glyph bitmap onto the main buffer
-                    for i in range(glyph.width):
-                        for j in range(glyph.height):
-                            px = glyph.bitmap[i, j]
-                            if px:
-                                buffer_x = current_x + i + glyph.dx
-                                buffer_y = glyph_y + j
-                                
-                                # Check bounds before drawing
-                                if 0 <= buffer_x < buffer.width and 0 <= buffer_y < buffer.height:
-                                    buffer[buffer_x, buffer_y] = color
-                                    
-                    current_x += glyph.shift_x
+                
+                fonts.draw_text(buffer, line, x, line_y, color, font, max_width)
             
             return True
         except Exception as e:
-            print(f"Error in _draw_pcf_text: {e}")
+            print(f"Error in draw_fitted_text: {e}")
             return False
 
 # Global font manager instance
@@ -328,29 +125,12 @@ font_manager = FontManager()
 
 def fit_and_draw_text(buffer, text, x, y, max_width, max_height, color, max_lines=1):
     """
-    Convenience function to fit and draw text in one call
-    
-    Args:
-        buffer: Display buffer
-        text: Text to draw
-        x, y: Position 
-        max_width, max_height: Available space
-        color: Color index
-        max_lines: Maximum lines allowed
-        
-    Returns:
-        dict: Layout information used
+    Convenience function to fit and draw text in one call.
     """
     try:
         layout = font_manager.get_best_font_for_text(text, max_width, max_height, max_lines)
-        result = font_manager.draw_fitted_text(buffer, layout, x, y, color, max_width, max_height)
+        font_manager.draw_fitted_text(buffer, layout, x, y, color, max_width, max_height)
         return layout
     except Exception as e:
         print(f"Error in fit_and_draw_text: {e}")
-        # Fallback to simple text
-        try:
-            from .fonts import draw_text
-            draw_text(buffer, text[:10], x, y, color, max_width)
-        except:
-            pass
         return {'fits': False, 'lines': [text], 'font': 'fallback'}
