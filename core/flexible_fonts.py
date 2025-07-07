@@ -102,7 +102,7 @@ class FontManager:
         # If nothing fits, use smallest font and truncate
         smallest_font = self._get_smallest_font()
         result = self._test_font_fit(smallest_font, text, max_width, max_height, max_lines)
-        result['font_name'] = 'fallback'
+        result['font_name'] = smallest_font #'fallback'
         result['fits'] = False  # Mark as not ideal fit
         return result
     
@@ -284,10 +284,48 @@ class FontManager:
             return False
     
     def _draw_pcf_text(self, buffer, layout, x, y, color, max_width, max_height):
-        """Draw text using PCF font (placeholder for CircuitPython implementation)"""
-        # This would use adafruit_display_text.label in real CircuitPython
-        # For now, fall back to bitmap
-        return self._draw_bitmap_text(buffer, layout, x, y, color, max_width, max_height)
+        """Draw text using PCF font"""
+        try:
+            font = layout['font']
+            line_height = layout['line_height']
+            
+            for line_idx, line in enumerate(layout['lines']):
+                line_y = y + (line_idx * line_height)
+                current_x = x
+                
+                # Skip if line is out of bounds
+                if max_height and line_y >= (y + max_height):
+                    break
+                    
+                for char in line:
+                    glyph = font.get_glyph(ord(char))
+                    if not glyph:
+                        continue
+
+                    # Stop if we would draw past the right edge
+                    if max_width and (current_x + glyph.shift_x) > (x + max_width):
+                        break
+                        
+                    glyph_y = line_y + (font.get_bounding_box()[1] - glyph.height - glyph.dy)
+                    
+                    # Blit the glyph bitmap onto the main buffer
+                    for i in range(glyph.width):
+                        for j in range(glyph.height):
+                            px = glyph.bitmap[i, j]
+                            if px:
+                                buffer_x = current_x + i + glyph.dx
+                                buffer_y = glyph_y + j
+                                
+                                # Check bounds before drawing
+                                if 0 <= buffer_x < buffer.width and 0 <= buffer_y < buffer.height:
+                                    buffer[buffer_x, buffer_y] = color
+                                    
+                    current_x += glyph.shift_x
+            
+            return True
+        except Exception as e:
+            print(f"Error in _draw_pcf_text: {e}")
+            return False
 
 # Global font manager instance
 font_manager = FontManager()
@@ -309,7 +347,6 @@ def fit_and_draw_text(buffer, text, x, y, max_width, max_height, color, max_line
     """
     try:
         layout = font_manager.get_best_font_for_text(text, max_width, max_height, max_lines)
-        
         result = font_manager.draw_fitted_text(buffer, layout, x, y, color, max_width, max_height)
         return layout
     except Exception as e:
