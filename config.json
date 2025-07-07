@@ -33,14 +33,15 @@
         {
           "name": "weather",
           "position": "top",
-          "height": 12,
+          "height": 6,
           "width": 64,
           "x": 0,
           "y": 0,
           "config": {
             "enabled": true,
             "location": "auto",
-            "units": "metric"
+            "units": "metric",
+            "layout": "single_line"
           }
         },
         {
@@ -49,7 +50,7 @@
           "height": 7,
           "width": 64,
           "x": 0,
-          "y": 14,
+          "y": 8,
           "config": {
             "enabled": true,
             "display_seconds": true,
@@ -61,10 +62,10 @@
         {
           "name": "news",
           "position": "bottom",
-          "height": 41,
+          "height": 47,
           "width": 64,
           "x": 0,
-          "y": 23,
+          "y": 16,
           "config": {
             "enabled": true,
             "rss_url": "https://feeds.bbci.co.uk/news/technology/rss.xml",

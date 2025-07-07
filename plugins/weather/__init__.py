@@ -64,56 +64,89 @@ class Plugin(PluginInterface):
         return None
     
     def render(self, display_buffer, width, height):
-        """Render weather information at the top"""
+        """Render weather information based on configured layout."""
         if not self.weather_data:
             return False
             
         try:
-            # Get screen configuration for positioning
-            screen_config = getattr(self, 'screen_config', {})
-            region_x = screen_config.get('x', 0)
-            region_y = screen_config.get('y', 0)
-            region_width = screen_config.get('width', width)
-            region_height = screen_config.get('height', 16)
+            layout = self.config.get("layout", "single_line") # Default to single_line
             
-            # Colors (using basic color indices for CircuitPython)
-            white = 7
-            blue = 1
-            yellow = 6
-            
-            # Clear the weather area
-            for y in range(region_y, min(region_y + region_height, height)):
-                for x in range(region_x, min(region_x + region_width, width)):
-                    display_buffer[x, y] = 0
-            
-            # Prepare text for rendering
-            temp_text = f"{self.weather_data['temp']}C"
-            condition_text = self.weather_data['condition']  # Let font system handle truncation
-            
-            # Render temperature in region (top line)
-            if FLEXIBLE_FONTS:
-                fit_and_draw_text(display_buffer, temp_text, 
-                                 region_x + 2, region_y + 2, 
-                                 region_width - 16, 6, yellow, 1)
-                
-                # Render condition below temperature (bottom line with smart fitting)
-                fit_and_draw_text(display_buffer, condition_text, 
-                                 region_x + 2, region_y + 10,
-                                 region_width - 4, 6, white, 1)
+            if layout == "dual_line":
+                return self._render_dual_line(display_buffer, width, height)
             else:
-                # Fallback to simple font
-                draw_text(display_buffer, temp_text, region_x + 2, region_y + 2, yellow, region_width - 16)
-                draw_text(display_buffer, condition_text, region_x + 2, region_y + 10, white, region_width - 4)
-            
-            # Simple weather icon placeholder (a few pixels representing weather)
-            icon_x = region_x + region_width - 10
-            self._draw_weather_icon(display_buffer, icon_x, region_y + 2, self.weather_data['condition'], blue)
-            
-            return True
-            
+                return self._render_single_line(display_buffer, width, height)
+                
         except Exception as e:
             print(f"Weather render error: {e}")
             return False
+
+    def _render_single_line(self, display_buffer, width, height):
+        """Render weather in a compact, single-line format."""
+        screen_config = getattr(self, 'screen_config', {})
+        region_x = screen_config.get('x', 0)
+        region_y = screen_config.get('y', 0)
+        region_width = screen_config.get('width', width)
+        region_height = screen_config.get('height', 12)
+
+        # Colors
+        white = 7
+        yellow = 5
+        blue = 4
+
+        # Clear the region
+        for y in range(region_y, min(region_y + region_height, height)):
+            for x in range(region_x, min(region_x + region_width, width)):
+                display_buffer[x, y] = 0
+
+        # Icon
+        icon_x = region_x + 2
+        icon_y = region_y + (region_height - 8) // 2 # Center icon vertically
+        self._draw_weather_icon(display_buffer, icon_x, icon_y, self.weather_data['condition'], blue)
+
+        # Temperature
+        temp_text = f"{self.weather_data['temp']}C"
+        temp_x = icon_x + 10
+        fit_and_draw_text(display_buffer, temp_text, temp_x, region_y + 2, region_width - temp_x, 7, yellow, 1)
+
+        # Location
+        location_text = self.weather_data['location']
+        location_x = temp_x + 22 # Position after temp
+        fit_and_draw_text(display_buffer, location_text, location_x, region_y + 2, region_width - location_x - 2, 7, white, 1)
+        
+        return True
+
+    def _render_dual_line(self, display_buffer, width, height):
+        """Render weather in a two-line format."""
+        screen_config = getattr(self, 'screen_config', {})
+        region_x = screen_config.get('x', 0)
+        region_y = screen_config.get('y', 0)
+        region_width = screen_config.get('width', width)
+        region_height = screen_config.get('height', 20)
+
+        # Colors
+        white = 7
+        yellow = 5
+        blue = 4
+
+        # Clear the region
+        for y in range(region_y, min(region_y + region_height, height)):
+            for x in range(region_x, min(region_x + region_width, width)):
+                display_buffer[x, y] = 0
+
+        # Top Line: Icon and Temperature
+        icon_x = region_x + 2
+        icon_y = region_y + 1
+        self._draw_weather_icon(display_buffer, icon_x, icon_y, self.weather_data['condition'], blue)
+        
+        temp_text = f"{self.weather_data['temp']}C"
+        temp_x = icon_x + 12
+        fit_and_draw_text(display_buffer, temp_text, temp_x, region_y + 2, region_width - temp_x, 7, yellow, 1)
+
+        # Bottom Line: Location
+        location_text = self.weather_data['location']
+        fit_and_draw_text(display_buffer, location_text, region_x + 2, region_y + 10, region_width - 4, 7, white, 1)
+
+        return True
     
 
     
