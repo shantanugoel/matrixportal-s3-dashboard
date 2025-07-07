@@ -41,7 +41,8 @@
             "enabled": true,
             "location": "auto",
             "units": "metric",
-            "layout": "single_line"
+            "layout": "single_line",
+            "location_short_name": "BLR"
           }
         },
         {

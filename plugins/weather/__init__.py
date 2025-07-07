@@ -109,7 +109,7 @@ class Plugin(PluginInterface):
         fit_and_draw_text(display_buffer, temp_text, temp_x, region_y + 2, region_width - temp_x, 7, yellow, 1)
 
         # Location
-        location_text = self.weather_data['location']
+        location_text = self.config.get("location_short_name") or self.weather_data['location']
         location_x = temp_x + 22 # Position after temp
         fit_and_draw_text(display_buffer, location_text, location_x, region_y + 2, region_width - location_x - 2, 7, white, 1)
         
@@ -143,7 +143,7 @@ class Plugin(PluginInterface):
         fit_and_draw_text(display_buffer, temp_text, temp_x, region_y + 2, region_width - temp_x, 7, yellow, 1)
 
         # Bottom Line: Location
-        location_text = self.weather_data['location']
+        location_text = self.config.get("location_short_name") or self.weather_data['location']
         fit_and_draw_text(display_buffer, location_text, region_x + 2, region_y + 10, region_width - 4, 7, white, 1)
 
         return True
