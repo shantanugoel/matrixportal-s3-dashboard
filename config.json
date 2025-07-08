@@ -118,7 +118,8 @@
           "y": 32,
           "config": {
             "enabled": true,
-            "team": "IND"
+            "team": "India",
+            "sportmonks_api_key": "${SPORTMONKS_API_KEY}"
           }
         }
       ]

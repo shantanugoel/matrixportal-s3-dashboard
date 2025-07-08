@@ -19,33 +19,78 @@ class Plugin(PluginInterface):
     def metadata(self):
         return PluginMetadata(
             name="cricket",
-            version="2.1.0",
-            description="Displays cricket scores.",
+            version="3.0.0",
+            description="Displays cricket scores using Sportmonks API.",
             refresh_type="pull",
             interval=60,
-            default_config={"enabled": False, "team": "India"}
+            default_config={
+                "enabled": False, 
+                "team": "India",
+                "sportmonks_api_key": ""
+            }
         )
 
     async def pull(self):
         if not self.network or not self.network.is_connected():
+            self.display_mode = "idle"
             return None
 
+        api_key = self.config.get("sportmonks_api_key")
+        if not api_key or api_key == "${SPORTMONKS_API_KEY}":
+            print("Sportmonks API key not configured in config.json")
+            self.display_mode = "idle"
+            self.match_data = {"text": "No API Key"}
+            return self.match_data
+
         team_name = self.config.get("team", "India").lower()
-        # Using a more reliable public JSON endpoint for cricket
-        api_url = "https://www.cricbuzz.com/api/cricket-match/commentary/2025" # Example, will need adjustment
+        api_url = f"https://cricket.sportmonks.com/api/v2.0/livescores?api_token={api_key}&include=localteam,visitorteam"
 
         try:
-            # This is a placeholder for a real public API.
-            # For now, we will simulate a successful response for demonstration.
-            # In a real scenario, one would parse the response from a public API.
-            self.display_mode = "live"
-            self.match_data = {"text": f"{team_name.upper()} 178/3 (18.2)"}
+            json_data = await self.network.fetch_json(api_url)
+            
+            if not json_data or 'data' not in json_data:
+                print("Cricket plugin: Invalid or empty response from API")
+                self.display_mode = "live" # Set to live to display the error
+                self.match_data = {"text": "API Error"}
+                return self.match_data
+
+            live_matches = json_data.get('data', [])
+            if not live_matches:
+                self.display_mode = "live" # Set to live to display the message
+                self.match_data = {"text": "No Live Matches"}
+                return self.match_data
+
+            for match in live_matches:
+                local_team = match.get('localteam', {}).get('name', '').lower()
+                visitor_team = match.get('visitorteam', {}).get('name', '').lower()
+
+                if team_name in local_team or team_name in visitor_team:
+                    self.display_mode = "live"
+                    score_summary = self._format_score(match)
+                    self.match_data = {"text": score_summary}
+                    return self.match_data
+
+            self.display_mode = "idle"
+            self.match_data = {"text": f"No match for {team_name.upper()}"}
             return self.match_data
 
         except Exception as e:
             print(f"Cricket plugin fetch error: {e}")
             self.display_mode = "idle"
+            self.match_data = {"text": "Fetch Error"}
             return None
+
+    def _format_score(self, match):
+        local_team = match.get('localteam', {}).get('code', 'T1')
+        visitor_team = match.get('visitorteam', {}).get('code', 'T2')
+        
+        live_score = ""
+        for run in match.get('runs', []):
+            if run.get('live', False):
+                live_score = f"{run.get('score', 0)}/{run.get('wickets', 0)} ({run.get('overs', 0)})"
+                break
+        
+        return f"{local_team.upper()} vs {visitor_team.upper()}\n{live_score}"
 
     def render(self, display_buffer, width, height):
         if self.display_mode == "idle" or not self.match_data:
@@ -67,10 +112,14 @@ class Plugin(PluginInterface):
         if FLEXIBLE_FONTS:
             word_wrap = self.config.get("word_wrap", True)
             fit_and_draw_text(display_buffer, text_to_draw, 
-                             region_x + 2, region_y + 1,
-                             region_width - 4, region_height - 2, 
-                             green, max_lines=99, word_wrap=word_wrap)
+                             region_x + 1, region_y + 1,
+                             region_width - 2, region_height - 2, 
+                             green, max_lines=3, word_wrap=word_wrap)
         else:
-            draw_text(display_buffer, text_to_draw[:20], region_x + 2, region_y + 2, green)
+            # Fallback for older font system
+            lines = text_to_draw.split('\n')
+            draw_text(display_buffer, lines[0][:12], region_x + 2, region_y + 2, green)
+            if len(lines) > 1:
+                draw_text(display_buffer, lines[1][:12], region_x + 2, region_y + 10, green)
 
         return True
