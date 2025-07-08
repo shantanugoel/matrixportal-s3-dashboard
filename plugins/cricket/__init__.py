@@ -1,4 +1,5 @@
 import time
+import adafruit_requests
 from core.plugin_interface import PluginInterface, PluginMetadata
 try:
     from core.flexible_fonts import fit_and_draw_text
@@ -8,119 +9,106 @@ except ImportError:
     FLEXIBLE_FONTS = False
     print("Using fallback fonts for cricket plugin")
 
+def _parse_xml(xml_string, tag):
+    """A very simple and non-robust XML parser for RSS feeds."""
+    results = []
+    start_tag = f"<{tag}>"
+    end_tag = f"</{tag}>"
+    start_index = 0
+    while True:
+        start = xml_string.find(start_tag, start_index)
+        if start == -1:
+            break
+        end = xml_string.find(end_tag, start)
+        if end == -1:
+            break
+        results.append(xml_string[start + len(start_tag):end])
+        start_index = end + len(end_tag)
+    return results
+
 class Plugin(PluginInterface):
     def __init__(self, config):
         super().__init__(config)
         self.network = None
         self.match_data = None
-        self.display_mode = "idle"
+        self.headlines = []
+        self.current_headline_index = 0
+        self.last_headline_change_time = 0
+        self.display_mode = "news" # Default to news
 
     @property
     def metadata(self):
         return PluginMetadata(
             name="cricket",
-            version="3.0.0",
-            description="Displays cricket scores using Sportmonks API.",
+            version="5.1.0",
+            description="Displays live cricket scores or news from an RSS feed.",
             refresh_type="pull",
-            interval=60,
+            interval=300,
             default_config={
                 "enabled": False, 
                 "team": "India",
-                "sportmonks_api_key": "",
-                "interval": 60
+                "rss_url": "https://www.espncricinfo.com/rss/content/story/feeds/6.xml",
+                "headline_rotation_minutes": 1,
+                "interval": 300
             }
         )
 
     async def pull(self):
-        if not self.network or not self.network.is_connected():
-            self.display_mode = "idle"
+        rss_url = self.config.get("rss_url")
+        if not self.network or not self.network.is_connected() or not rss_url:
             return None
 
-        api_key = self.config.get("sportmonks_api_key")
-        if not api_key or api_key == "${SPORTMONKS_API_KEY}":
-            print("Sportmonks API key not configured in config.json")
-            self.display_mode = "live"
-            self.match_data = {"text": "No API Key"}
-            return self.match_data
-
-        team_name = self.config.get("team", "India")
-        
-        # First, check for live matches
-        live_api_url = f"https://cricket.sportmonks.com/api/v2.0/livescores?api_token={api_key}&include=localteam,visitorteam"
-        json_data = await self.network.fetch_json(live_api_url)
-
-        if json_data and json_data.get('data'):
-            for match in json_data['data']:
-                local_team_name = match.get('localteam', {}).get('name', '').lower()
-                visitor_team_name = match.get('visitorteam', {}).get('name', '').lower()
-                if team_name.lower() in local_team_name or team_name.lower() in visitor_team_name:
-                    self.display_mode = "live"
-                    self.match_data = {"text": self._format_score(match)}
-                    return self.match_data
-
-        # If no live match, find the next fixture
         try:
-            # Get team ID
-            teams_url = f"https://cricket.sportmonks.com/api/v2.0/teams?api_token={api_key}&filter[name]={team_name}"
-            teams_data = await self.network.fetch_json(teams_url)
-            if not teams_data or not teams_data.get('data'):
-                self.display_mode = "live"
-                self.match_data = {"text": f"Team {team_name} not found"}
-                return self.match_data
+            requests = adafruit_requests.Session(self.network.get_socket_pool(), self.network.get_ssl_context())
+            response = requests.get(rss_url, timeout=10)
             
-            team_id = teams_data['data'][0]['id']
+            if response.status_code != 200:
+                print(f"Cricket RSS fetch error: Status {response.status_code}")
+                self.headlines = ["RSS Fetch Error"]
+                response.close()
+                return
 
-            # Get all upcoming fixtures sorted by date
-            fixtures_url = f"https://cricket.sportmonks.com/api/v2.0/fixtures?api_token={api_key}&filter[status]=NS&sort=starting_at&include=localteam,visitorteam"
-            fixtures_data = await self.network.fetch_json(fixtures_url)
+            xml_text = response.text
+            response.close()
+            
+            # First, get all <item> blocks, then get the <title> from each.
+            # This correctly ignores the main <channel> title.
+            items = _parse_xml(xml_text, "item")
+            titles = []
+            for item in items:
+                item_titles = _parse_xml(item, "title")
+                if item_titles:
+                    titles.append(item_titles[0])
 
-            if not fixtures_data or not fixtures_data.get('data'):
-                self.display_mode = "live"
-                self.match_data = {"text": f"No upcoming matches found"}
-                return self.match_data
-
-            # Find the first match for the configured team
-            for match in fixtures_data['data']:
-                local_team_id = match.get('localteam', {}).get('id')
-                visitor_team_id = match.get('visitorteam', {}).get('id')
-                if team_id == local_team_id or team_id == visitor_team_id:
-                    self.display_mode = "live"
-                    self.match_data = {"text": self._format_fixture(match)}
+            team_name = self.config.get("team", "India").lower()
+            
+            # Look for a live score in the titles
+            for title in titles:
+                if " vs " in title.lower() and "/" in title and team_name in title.lower():
+                    self.display_mode = "live_score"
+                    self.match_data = {"text": self._format_score_title(title)}
                     return self.match_data
 
-            # If no match was found in the upcoming list
-            self.display_mode = "live"
-            self.match_data = {"text": f"No upcoming match for {team_name}"}
-            return self.match_data
+            # If no live score, use titles as news headlines
+            self.display_mode = "news"
+            if titles:
+                self.headlines = titles
+            else:
+                self.headlines = ["No news found"]
+            self.current_headline_index = 0
+            self.last_headline_change_time = time.monotonic()
+            return {"headlines": self.headlines}
 
         except Exception as e:
-            print(f"Cricket plugin fixture fetch error: {e}")
-            self.display_mode = "live"
-            self.match_data = {"text": "Fixture Error"}
+            print(f"Cricket plugin RSS fetch error: {e}")
+            self.headlines = ["RSS Parse Error"]
             return None
 
-    def _format_fixture(self, match):
-        local_team = match.get('localteam', {}).get('code', 'T1')
-        visitor_team = match.get('visitorteam', {}).get('code', 'T2')
-        date_str = match.get('starting_at', '').split('T')[0]
-        return f"{local_team} vs {visitor_team}\non {date_str}"
-
-    def _format_score(self, match):
-        local_team = match.get('localteam', {}).get('code', 'T1')
-        visitor_team = match.get('visitorteam', {}).get('code', 'T2')
-        
-        live_score = ""
-        for run in match.get('runs', []):
-            if run.get('live', False):
-                live_score = f"{run.get('score', 0)}/{run.get('wickets', 0)} ({run.get('overs', 0)})"
-                break
-        
-        return f"{local_team.upper()} vs {visitor_team.upper()}\n{live_score}"
+    def _format_score_title(self, title):
+        # A simple formatter, might need adjustment based on actual titles
+        return title.replace(" - Live Cricket Score", "")
 
     def render(self, display_buffer, width, height):
-        if self.display_mode == "idle" or not self.match_data:
-            return False
-
         screen_config = getattr(self, 'screen_config', {})
         region_x, region_y = screen_config.get('x', 0), screen_config.get('y', 0)
         region_width, region_height = screen_config.get('width', width), screen_config.get('height', height)
@@ -132,19 +120,32 @@ class Plugin(PluginInterface):
             for x in range(region_x, min(region_x + region_width, width)):
                 display_buffer[x, y] = 0
 
-        text_to_draw = self.match_data.get("text", "")
-        
+        text_to_draw = ""
+        color = green
+
+        if self.display_mode == "live_score" and self.match_data:
+            text_to_draw = self.match_data.get("text", "Score Error")
+        elif self.display_mode == "news" and self.headlines:
+            rotation_minutes = self.config.get("headline_rotation_minutes", 1)
+            if (time.monotonic() - self.last_headline_change_time) > (rotation_minutes * 60):
+                self.current_headline_index = (self.current_headline_index + 1) % len(self.headlines)
+                self.last_headline_change_time = time.monotonic()
+            
+            if self.headlines:
+                 text_to_draw = self.headlines[self.current_headline_index]
+            color = white
+
+        if not text_to_draw:
+            return False
+
         if FLEXIBLE_FONTS:
             word_wrap = self.config.get("word_wrap", True)
             fit_and_draw_text(display_buffer, text_to_draw, 
                              region_x + 1, region_y + 1,
                              region_width - 2, region_height - 2, 
-                             green, max_lines=3, word_wrap=word_wrap)
+                             color, max_lines=4, word_wrap=word_wrap)
         else:
-            # Fallback for older font system
-            lines = text_to_draw.split('\n')
-            draw_text(display_buffer, lines[0][:12], region_x + 2, region_y + 2, green)
-            if len(lines) > 1:
-                draw_text(display_buffer, lines[1][:12], region_x + 2, region_y + 10, green)
+            draw_text(display_buffer, text_to_draw[:24], region_x + 2, region_y + 2, color)
 
         return True
+

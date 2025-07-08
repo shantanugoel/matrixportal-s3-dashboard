@@ -120,7 +120,8 @@
           "config": {
             "enabled": true,
             "team": "India",
-            "sportmonks_api_key": "${SPORTMONKS_API_KEY}",
+            "rss_url": "https://www.espncricinfo.com/rss/content/story/feeds/6.xml",
+            "headline_rotation_minutes": 1,
             "interval": 300
           }
         }
