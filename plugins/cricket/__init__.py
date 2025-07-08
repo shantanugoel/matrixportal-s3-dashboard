@@ -26,7 +26,8 @@ class Plugin(PluginInterface):
             default_config={
                 "enabled": False, 
                 "team": "India",
-                "sportmonks_api_key": ""
+                "sportmonks_api_key": "",
+                "interval": 60
             }
         )
 

@@ -127,7 +127,9 @@ class ScreenScheduler:
                     
                     plugin_name = plugin.metadata.name
                     last_pull = last_pull_times.get(plugin_name, 0)
-                    interval = plugin.metadata.interval
+                    
+                    # Get interval from config, fallback to metadata
+                    interval = plugin.config.get('interval', plugin.metadata.interval)
                     
                     # Check if it's time to pull data
                     if (current_time - last_pull) >= interval:

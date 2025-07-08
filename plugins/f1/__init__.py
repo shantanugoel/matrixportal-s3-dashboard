@@ -22,7 +22,7 @@ class Plugin(PluginInterface):
             description="Displays the latest F1 race information.",
             refresh_type="pull",
             interval=300,
-            default_config={"enabled": False, "show_top": 3}
+            default_config={"enabled": False, "show_top": 3, "interval": 300}
         )
 
     async def pull(self):
