@@ -113,7 +113,7 @@ class Plugin(PluginInterface):
         region_x, region_y = screen_config.get('x', 0), screen_config.get('y', 0)
         region_width, region_height = screen_config.get('width', width), screen_config.get('height', height)
         
-        white, green = 7, 3
+        white, green = 1, 3
         
         # Clear the plugin's region before drawing
         for y in range(region_y, min(region_y + region_height, height)):
