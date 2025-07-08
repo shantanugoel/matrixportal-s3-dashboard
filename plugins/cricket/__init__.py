@@ -38,47 +38,71 @@ class Plugin(PluginInterface):
         api_key = self.config.get("sportmonks_api_key")
         if not api_key or api_key == "${SPORTMONKS_API_KEY}":
             print("Sportmonks API key not configured in config.json")
-            self.display_mode = "idle"
+            self.display_mode = "live"
             self.match_data = {"text": "No API Key"}
             return self.match_data
 
-        team_name = self.config.get("team", "India").lower()
-        api_url = f"https://cricket.sportmonks.com/api/v2.0/livescores?api_token={api_key}&include=localteam,visitorteam"
+        team_name = self.config.get("team", "India")
+        
+        # First, check for live matches
+        live_api_url = f"https://cricket.sportmonks.com/api/v2.0/livescores?api_token={api_key}&include=localteam,visitorteam"
+        json_data = await self.network.fetch_json(live_api_url)
 
-        try:
-            json_data = await self.network.fetch_json(api_url)
-            
-            if not json_data or 'data' not in json_data:
-                print("Cricket plugin: Invalid or empty response from API")
-                self.display_mode = "live" # Set to live to display the error
-                self.match_data = {"text": "API Error"}
-                return self.match_data
-
-            live_matches = json_data.get('data', [])
-            if not live_matches:
-                self.display_mode = "live" # Set to live to display the message
-                self.match_data = {"text": "No Live Matches"}
-                return self.match_data
-
-            for match in live_matches:
-                local_team = match.get('localteam', {}).get('name', '').lower()
-                visitor_team = match.get('visitorteam', {}).get('name', '').lower()
-
-                if team_name in local_team or team_name in visitor_team:
+        if json_data and json_data.get('data'):
+            for match in json_data['data']:
+                local_team_name = match.get('localteam', {}).get('name', '').lower()
+                visitor_team_name = match.get('visitorteam', {}).get('name', '').lower()
+                if team_name.lower() in local_team_name or team_name.lower() in visitor_team_name:
                     self.display_mode = "live"
-                    score_summary = self._format_score(match)
-                    self.match_data = {"text": score_summary}
+                    self.match_data = {"text": self._format_score(match)}
                     return self.match_data
 
-            self.display_mode = "idle"
-            self.match_data = {"text": f"No match for {team_name.upper()}"}
+        # If no live match, find the next fixture
+        try:
+            # Get team ID
+            teams_url = f"https://cricket.sportmonks.com/api/v2.0/teams?api_token={api_key}&filter[name]={team_name}"
+            teams_data = await self.network.fetch_json(teams_url)
+            if not teams_data or not teams_data.get('data'):
+                self.display_mode = "live"
+                self.match_data = {"text": f"Team {team_name} not found"}
+                return self.match_data
+            
+            team_id = teams_data['data'][0]['id']
+
+            # Get all upcoming fixtures sorted by date
+            fixtures_url = f"https://cricket.sportmonks.com/api/v2.0/fixtures?api_token={api_key}&filter[status]=NS&sort=starting_at&include=localteam,visitorteam"
+            fixtures_data = await self.network.fetch_json(fixtures_url)
+
+            if not fixtures_data or not fixtures_data.get('data'):
+                self.display_mode = "live"
+                self.match_data = {"text": f"No upcoming matches found"}
+                return self.match_data
+
+            # Find the first match for the configured team
+            for match in fixtures_data['data']:
+                local_team_id = match.get('localteam', {}).get('id')
+                visitor_team_id = match.get('visitorteam', {}).get('id')
+                if team_id == local_team_id or team_id == visitor_team_id:
+                    self.display_mode = "live"
+                    self.match_data = {"text": self._format_fixture(match)}
+                    return self.match_data
+
+            # If no match was found in the upcoming list
+            self.display_mode = "live"
+            self.match_data = {"text": f"No upcoming match for {team_name}"}
             return self.match_data
 
         except Exception as e:
-            print(f"Cricket plugin fetch error: {e}")
-            self.display_mode = "idle"
-            self.match_data = {"text": "Fetch Error"}
+            print(f"Cricket plugin fixture fetch error: {e}")
+            self.display_mode = "live"
+            self.match_data = {"text": "Fixture Error"}
             return None
+
+    def _format_fixture(self, match):
+        local_team = match.get('localteam', {}).get('code', 'T1')
+        visitor_team = match.get('visitorteam', {}).get('code', 'T2')
+        date_str = match.get('starting_at', '').split('T')[0]
+        return f"{local_team} vs {visitor_team}\non {date_str}"
 
     def _format_score(self, match):
         local_team = match.get('localteam', {}).get('code', 'T1')
