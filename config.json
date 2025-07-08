@@ -120,7 +120,7 @@
           "config": {
             "enabled": true,
             "team": "India",
-            "cricketdata_api_key": "${CRICKETDATA_API_KEY}",
+            "sportmonks_api_key": "${SPORTMONKS_API_KEY}",
             "interval": 300
           }
         }
